@@ -1,0 +1,25 @@
+# Dependencies and build output
+node_modules/
+dist/
+release/
+
+# Runtime/user data (must never be committed)
+config.json
+auth-cache/
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
+
+# Credentials and certificates
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Editors / operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

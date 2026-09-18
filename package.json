@@ -1,0 +1,84 @@
+{
+  "name": "karabarakorsa-client",
+  "productName": "Karabarakorsa AFK Client",
+  "version": "1.15.10",
+  "description": "Karabarakorsa AFK Client - Professional Minecraft AFK Client for Windows",
+  "main": "src/main/main.js",
+  "author": "Karabarakorsa",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder --win --x64",
+    "build:portable": "electron-builder --win portable --x64",
+    "postinstall": "electron-builder install-app-deps",
+    "verify": "node scripts/verify.js"
+  },
+  "dependencies": {
+    "https-proxy-agent": "^7.0.5",
+    "minecraft-protocol": "^1.47.0",
+    "mineflayer": "^4.20.1",
+    "msmc": "^5.0.5",
+    "prismarine-auth": "^2.5.0",
+    "socks": "^2.8.3"
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.karabarakorsa.afkclient",
+    "productName": "Karabarakorsa AFK Client",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/tray.png",
+        "to": "tray.png"
+      },
+      {
+        "from": "build/tray16.png",
+        "to": "tray16.png"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Karabarakorsa AFK Client"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/egemastertt/karabarakorsa-client-updates.git"
+  },
+  "bugs": {
+    "url": "https://github.com/egemastertt/karabarakorsa-client-updates/issues"
+  },
+  "homepage": "https://github.com/egemastertt/karabarakorsa-client-updates#readme"
+}

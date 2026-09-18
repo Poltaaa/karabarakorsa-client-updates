@@ -1,0 +1,33 @@
+name: Verify and build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify JavaScript source
+        run: npm run verify
+      - name: Build portable executable
+        run: npm run build:portable
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: karabarakorsa-client-windows-${{ github.sha }}
+          path: dist/*.exe
+          if-no-files-found: error
