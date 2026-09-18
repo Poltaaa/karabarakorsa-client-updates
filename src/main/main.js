@@ -511,7 +511,7 @@ app.whenReady().then(() => {
  * Her acilista sabit GitHub Releases adresi kontrol edilir. Yeni surum varsa
  * sag ustte GUNCELLE gorunur; tek tikla indirir, sessiz kurar ve yeniden acar.
  * -------------------------------------------------------------------------- */
-const UPDATE_URL = 'https://api.github.com/repos/egemastertt/karabarakorsa-client-updates/releases/latest';
+const UPDATE_URL = 'https://api.github.com/repos/Poltaaa/karabarakorsa-client-updates/releases/latest';
 let updateInfo = { ok: false, update: false };
 let updateTimer = null;
 let updateBusy = false;

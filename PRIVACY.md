@@ -11,7 +11,7 @@ Uygulama yalnızca işlevleri için gerekli hedeflere bağlanır:
 - Kullanıcının seçtiği Minecraft sunucuları
 - Microsoft/Minecraft kimlik doğrulama servisleri (Microsoft hesabı kullanıldığında)
 - Kullanıcının yapılandırdığı proxy sunucuları
-- Güncelleme denetimi için `api.github.com/repos/egemastertt/karabarakorsa-client-updates/releases/latest`
+- Güncelleme denetimi için `api.github.com/repos/Poltaaa/karabarakorsa-client-updates/releases/latest`
 - Sunucunun açıkça gönderdiği kaynak paketi adresi (kabul edilirse)
 
 ## Telemetri

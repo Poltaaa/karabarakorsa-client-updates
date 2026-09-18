@@ -4,7 +4,7 @@
 [![Source available](https://img.shields.io/badge/source-available-brightgreen.svg)](#kaynaktan-derleme)
 
 Windows için Electron, Mineflayer ve Minecraft Protocol tabanlı açık kaynak Minecraft AFK istemcisi.
-Bu depo **v1.15.10 / paket 36** kaynak kodunu içerir.
+Bu depo **v1.15.10 / paket 37** kaynak kodunu içerir.
 
 > **Bağımsız proje:** Mojang, Microsoft veya herhangi bir Minecraft sunucusuyla bağlantılı ya da onlar tarafından onaylanmış değildir.
 > Kullandığınız sunucunun bot, AFK ve otomasyon kurallarına uymak sizin sorumluluğunuzdadır.
@@ -42,14 +42,14 @@ Gereksinimler:
 - npm
 
 ```bash
-git clone https://github.com/egemastertt/karabarakorsa-client-updates.git
+git clone https://github.com/Poltaaa/karabarakorsa-client-updates.git
 cd karabarakorsa-client-updates
 npm ci
 npm run verify
 npm start
 ```
 
-Windows'ta alternatif olarak `BASLAT-36.bat` dosyasını çalıştırabilirsiniz.
+Windows'ta alternatif olarak `BASLAT-37.bat` dosyasını çalıştırabilirsiniz.
 
 ## Kaynaktan derleme
 
@@ -69,7 +69,7 @@ npm run verify
 npm run build
 ```
 
-Çıktılar `dist/` klasörüne yazılır. `EXE-OLUSTUR-36.bat` aynı işlemi Windows'ta otomatik yapar.
+Çıktılar `dist/` klasörüne yazılır. `EXE-OLUSTUR-37.bat` aynı işlemi Windows'ta otomatik yapar.
 
 ## İndirilen EXE neden uyarı gösterebilir?
 
