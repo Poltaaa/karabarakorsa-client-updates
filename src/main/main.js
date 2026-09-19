@@ -14,6 +14,7 @@ const logger = require('./logger');
 const BotManager = require('./bot/bot-manager');
 const versions = require('./versions');
 const updater = require('./updater');
+const TorController = require('./tor-controller');
 
 let win = null;
 let tray = null;
@@ -21,6 +22,7 @@ let store = null;
 let bot = null;
 let metricsTimer = null;
 let quitting = false;
+let tor = null;
 
 const APP_NAME = 'Karabarakorsa AFK Client';
 
@@ -483,9 +485,10 @@ function migrateUserData() {
 }
 
 // ---------------------------------------------------------------------------
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   migrateUserData();
   store = new Store();
+  tor = new TorController(logger);
   logger.setLang(store.get().settings.language);
   const authDir = path.join(app.getPath('userData'), 'auth-cache');
   if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
@@ -499,6 +502,7 @@ app.whenReady().then(() => {
   createTray();
   startMetrics();
   startStatePump();
+  if (store.get().tor && store.get().tor.enabled) { try { await tor.start({ countries: store.get().tor.countries || [], strictNodes: !!store.get().tor.strictNodes }); } catch (e) { logger.warn('[VPN] ' + e.message); store.patch({ tor: { enabled: false } }); } }
   applyAutoLaunch(store.get().settings.startWithWindows);
   writeDiag(`${APP_NAME} ${app.getVersion()} started`);   // KAYITLAR acilista bos kalsin
   autoConnectStartupAccounts();
@@ -567,7 +571,7 @@ async function installLatestUpdate() {
 ipcMain.handle('update:state', () => updateInfo);
 ipcMain.handle('update:install', () => installLatestUpdate());
 
-app.on('before-quit', () => { quitting = true; disconnectAll(); store.saveNow(); });
+app.on('before-quit', () => { quitting = true; disconnectAll(); if (tor) tor.stop(); store.saveNow(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 // ---------------------------- IPC -------------------------------------------
@@ -636,6 +640,11 @@ function spamCfgFor(accountId, base) {
 }
 
 // Tek bir hesap icin gercek config
+function vpnAppliesTo(cfg, accountId) {
+  const ids = cfg && cfg.tor && cfg.tor.accountIds;
+  return !Array.isArray(ids) ? true : ids.includes(accountId);
+}
+
 function configForAccount(accountId) {
   const base = runtimeConfig();
   const c = { ...base };
@@ -644,8 +653,12 @@ function configForAccount(accountId) {
     if (FEATURE_SECTION[k]) continue;
     c.toggles[k] = featOn(base, k, accountId);
   }
+  // VPN is account-scoped and must be applied after the normal Proxy feature.
+  if (base.tor && base.tor.enabled && vpnAppliesTo(base, accountId) && tor && tor.isRunning()) c.toggles.proxy = true;
   c.antiAfk = { ...(base.antiAfk || {}), enabled: c.toggles.antiAfk };
   c.autoReconnect = { ...(base.autoReconnect || {}), enabled: c.toggles.autoReconnect };
+  c.tor = { ...(base.tor || {}), enabled: !!(base.tor && base.tor.enabled && vpnAppliesTo(base, accountId)) };
+  if (c.tor.enabled && c.tor.streamSeparation && tor && tor.isRunning()) c.vpnNewIdentity = () => tor.newIdentity();
   const farmer = (base.macros && base.macros.farmer) || {};
   c.macros = { ...(base.macros || {}), farmer: { ...farmer, enabled: featOn(base, 'macroFarmer', accountId) } };
   c.autoSpam = spamCfgFor(accountId, base);
@@ -656,6 +669,12 @@ function pushConfigToSessions() {
     try { x.bot.updateConfig(configForAccount(x.accountId)); } catch (_) {}
   });
 }
+
+ipcMain.handle('tor:status', () => tor ? tor.status() : { running: false });
+ipcMain.handle('tor:start', async (_e, opts) => { try { const st = await tor.start(opts || {}); store.patch({ tor: { enabled: true, country: st.country, countries: String(st.country || '').split(',').filter(Boolean) } }); return { ok: true, status: st }; } catch (e) { logger.error(e.message); return { ok: false, error: e.message }; } });
+ipcMain.handle('tor:stop', () => { const st = tor.stop(); store.patch({ tor: { enabled: false } }); return { ok: true, status: st }; });
+ipcMain.handle('tor:new-identity', async () => { try { return { ok: true, status: await tor.newIdentity() }; } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('tor:set-country', async (_e, payload) => { try { const x = payload || {}; const st = await tor.setCountry(x.countries || [], !!x.strictNodes); store.patch({ tor: { countries: x.countries || [], country: st.country, strictNodes: !!x.strictNodes } }); return { ok: true, status: st }; } catch (e) { return { ok: false, error: e.message }; } });
 
 ipcMain.handle('config:get', () => safeConfig());
 
@@ -696,12 +715,18 @@ async function connectAccount(accountId) {
   }
   activeSlot = s.slot;                       // arayuz yeni oturuma gecsin
   let proxy = cfg.proxies.list.find((p) => p.id === cfg.proxies.selected) || null;
+  if (cfg.tor && cfg.tor.enabled && vpnAppliesTo(cfg, account.id) && tor && tor.isRunning()) proxy = tor.proxy();
   if (proxy) proxy = { ...proxy, password: store.decrypt(proxy.password) };
 
   // Premium (Microsoft) hesaplarda oyun oturumu kayitli jetondan uretilir:
   // kullanici ikinci kez giris yapmak zorunda kalmaz.
   const acc = Object.assign({}, account);
   const accCfg = configForAccount(account.id);
+  if (cfg.tor && cfg.tor.enabled && vpnAppliesTo(cfg, account.id) && cfg.tor.preventNonVpn !== false && (!tor || !tor.isRunning())) {
+    logger.error(L('VPN aktif değil; bağlantı güvenlik için engellendi.', 'VPN is not running; connection blocked for safety.'));
+    removeSession(s.slot);
+    return { ok: false, error: 'vpn_required' };
+  }
   if (acc.type === 'microsoft' && !accCfg.toggles.offline) {
     try { acc.mcSession = await msSessionFor(acc); }
     catch (e) {
@@ -710,6 +735,7 @@ async function connectAccount(accountId) {
       return { ok: false, error: e.message };
     }
   }
+  if (cfg.tor && cfg.tor.enabled && vpnAppliesTo(cfg, account.id) && cfg.tor.streamSeparation && tor && tor.isRunning()) { try { await tor.newIdentity(); } catch (e) { logger.warn('[VPN] ' + e.message); } }
   const r = await s.bot.connect(accCfg, acc, proxy);
   sendSlots();
   return Object.assign({ slot: s.slot }, r || {});

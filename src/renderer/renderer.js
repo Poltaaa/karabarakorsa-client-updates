@@ -525,6 +525,117 @@ async function addProxy() {
   renderProxies(); window.toast(T('tProxyAdded'), 'ok');
 }
 
+let vpnBusy = false;
+const VPN_COUNTRIES = [
+  ['', 'Automatic'], ['AR', 'Argentina'], ['AU', 'Australia'], ['AT', 'Austria'], ['BE', 'Belgium'], ['BR', 'Brazil'],
+  ['BG', 'Bulgaria'], ['CA', 'Canada'], ['CL', 'Chile'], ['CN', 'China'], ['CO', 'Colombia'], ['HR', 'Croatia'],
+  ['CZ', 'Czechia'], ['DK', 'Denmark'], ['EG', 'Egypt'], ['EE', 'Estonia'], ['FI', 'Finland'], ['FR', 'France'],
+  ['DE', 'Germany'], ['GR', 'Greece'], ['HK', 'Hong Kong'], ['HU', 'Hungary'], ['IN', 'India'], ['ID', 'Indonesia'],
+  ['IE', 'Ireland'], ['IL', 'Israel'], ['IT', 'Italy'], ['JP', 'Japan'], ['LV', 'Latvia'], ['LT', 'Lithuania'],
+  ['LU', 'Luxembourg'], ['MY', 'Malaysia'], ['MX', 'Mexico'], ['NL', 'Netherlands'], ['NZ', 'New Zealand'],
+  ['NO', 'Norway'], ['PL', 'Poland'], ['PT', 'Portugal'], ['RO', 'Romania'], ['RS', 'Serbia'], ['SG', 'Singapore'],
+  ['SK', 'Slovakia'], ['SI', 'Slovenia'], ['ZA', 'South Africa'], ['KR', 'South Korea'], ['ES', 'Spain'],
+  ['SE', 'Sweden'], ['CH', 'Switzerland'], ['TW', 'Taiwan'], ['TR', 'Turkey'], ['UA', 'Ukraine'], ['GB', 'United Kingdom'],
+  ['US', 'United States']
+];
+function vpnCountryName() {
+  const list = (cfg && cfg.tor && cfg.tor.countries) || [];
+  if (!list.length) return 'Automatic';
+  return list.map((x) => (VPN_COUNTRIES.find((c) => c[0] === x) || [x, x])[1]).join(', ');
+}
+async function renderTor() {
+  if (!bridge.tor || !cfg) return;
+  const vpn = cfg.tor || (cfg.tor = {});
+  const r = await bridge.tor.status(); const on = !!(r && r.running);
+  const el = $('tor-status'); if (el) { el.textContent = on ? 'ON' : 'OFF'; el.classList.toggle('on', on); }
+  if ($('vpn-state')) { $('vpn-state').textContent = on ? 'ON' : 'OFF'; $('vpn-state').classList.toggle('vpn-on', on); }
+  if ($('tor-new')) $('tor-new').disabled = !on || vpnBusy;
+  if ($('tor-start')) $('tor-start').disabled = vpnBusy;
+  if ($('tor-stop')) $('tor-stop').disabled = vpnBusy;
+  if ($('vpn-country-name')) $('vpn-country-name').textContent = vpnCountryName();
+  if ($('vpn-prevent')) $('vpn-prevent').checked = vpn.preventNonVpn !== false;
+  if ($('vpn-stream')) $('vpn-stream').checked = !!vpn.streamSeparation;
+  if ($('vpn-dns')) $('vpn-dns').checked = vpn.resolveDns !== false;
+  if ($('vpn-strict')) $('vpn-strict').checked = !!vpn.strictNodes;
+}
+async function startTor() {
+  if (vpnBusy) return;
+  vpnBusy = true; renderTor();
+  try {
+    const t = cfg.tor || {};
+    const r = await bridge.tor.start({ countries: t.countries || [], strictNodes: !!t.strictNodes });
+    if (r && r.ok) { cfg.tor = { ...t, enabled: true, country: r.status.country }; await save({ tor: cfg.tor }); window.toast('VPN aktif.', 'ok'); }
+    else { cfg.tor = { ...t, enabled: false }; await save({ tor: { enabled: false } }); window.toast((r && r.error) || 'VPN başlatılamadı.', 'error'); }
+  } finally { vpnBusy = false; renderTor(); }
+}
+async function stopTor() {
+  if (vpnBusy) return;
+  vpnBusy = true; renderTor();
+  try { await bridge.tor.stop(); cfg.tor = { ...(cfg.tor || {}), enabled: false }; await save({ tor: { enabled: false } }); window.toast('VPN kapatıldı.', 'info'); }
+  finally { vpnBusy = false; renderTor(); }
+}
+async function newTorIdentity() { if (vpnBusy || ($('tor-new') && $('tor-new').disabled)) return; const r = await bridge.tor.newIdentity(); window.toast(r && r.ok ? 'VPN IP adresi değiştirildi.' : ((r && r.error) || 'VPN IP değiştirilemedi.'), r && r.ok ? 'ok' : 'error'); renderTor(); }
+async function toggleVpn() { if (vpnBusy) return; const r = await bridge.tor.status(); return r && r.running ? stopTor() : startTor(); }
+function openVpnSettings() { $('vpn-settings-modal').classList.remove('hidden'); renderTor(); }
+function closeVpnSettings() { $('vpn-settings-modal').classList.add('hidden'); }
+async function saveVpnSettings() {
+  if (!cfg) return;
+  const before = cfg.tor || {};
+  const next = { ...before, preventNonVpn: $('vpn-prevent').checked, streamSeparation: $('vpn-stream').checked, resolveDns: $('vpn-dns').checked };
+  const changed = ['preventNonVpn', 'streamSeparation', 'resolveDns'].some((k) => before[k] !== next[k]);
+  cfg.tor = next;
+  if (changed) { await save({ tor: next }); window.toast('VPN ayarları kaydedildi.', 'ok'); }
+  closeVpnSettings();
+}
+function renderVpnCountryList() {
+  const box = $('vpn-country-list'); if (!box) return;
+  const selected = new Set((cfg.tor && cfg.tor.countries) || []);
+  box.innerHTML = VPN_COUNTRIES.slice(1).map(([code, name]) => `<label class="vpn-country-option"><input type="checkbox" data-vpn-code="${code}" ${selected.has(code) ? 'checked' : ''}><span>${name}</span><small>${code}</small></label>`).join('');
+}
+function openVpnCountries() { if (!cfg) return; renderVpnCountryList(); $('vpn-strict').checked = !!(cfg.tor && cfg.tor.strictNodes); $('vpn-country-modal').classList.remove('hidden'); }
+async function saveVpnCountries() {
+  const countries = [...document.querySelectorAll('[data-vpn-code]:checked')].map((x) => x.dataset.vpnCode);
+  cfg.tor = { ...(cfg.tor || {}), countries, country: countries.join(','), strictNodes: $('vpn-strict').checked };
+  const r = await bridge.tor.setCountry({ countries, strictNodes: $('vpn-strict').checked });
+  if (r && !r.ok) return window.toast(r.error || 'Ülke seçimi uygulanamadı.', 'error');
+  await save({ tor: cfg.tor }); $('vpn-country-modal').classList.add('hidden'); renderTor(); window.toast('VPN ülkesi güncellendi.', 'ok');
+  if (countries.length) openVpnAccountPicker();
+  else { cfg.tor = { ...(cfg.tor || {}), accountIds: null }; await save({ tor: { accountIds: null } }); window.toast('Otomatik ülke seçimi tüm hesaplara uygulanacak.', 'info'); }
+}
+function resetVpnCountries() { document.querySelectorAll('[data-vpn-code]').forEach((x) => { x.checked = false; }); $('vpn-strict').checked = false; }
+let vpnPick = null;
+function openVpnAccountPicker() {
+  if (!cfg) return;
+  vpnPick = { sel: Array.isArray(cfg.tor && cfg.tor.accountIds) ? [...cfg.tor.accountIds] : [] };
+  $('am-title').textContent = 'VPN HESABI';
+  $('am-off').classList.add('hidden');
+  const sub = document.querySelector('#acc-modal [data-i18n="amSub"]'); if (sub) sub.textContent = 'VPN’in hangi hesaplarda kullanılacağını seçin. Oyunda olan hesaplarda değişiklik, bağlantıyı kesip yeniden bağlandığınızda uygulanır.';
+  renderVpnAccountPicker(); $('acc-modal').classList.remove('hidden');
+}
+function closeVpnAccountPicker() { vpnPick = null; $('am-off').classList.remove('hidden'); $('acc-modal').classList.add('hidden'); }
+function renderVpnAccountPicker() {
+  if (!vpnPick) return;
+  const box = $('am-list'); const list = (cfg.accounts && cfg.accounts.list) || []; const live = {};
+  (slotInfo.list || []).forEach((x) => { live[x.accountId] = x; });
+  box.innerHTML = list.length ? list.map((a) => {
+    const selected = vpnPick.sel.includes(a.id); const online = !!live[a.id];
+    const tag = online ? 'OYUNDA' : (a.type === 'microsoft' ? T('amPremium') : T('amCracked'));
+    return `<button class="amrow${selected ? ' on' : ''}" data-vpn-account="${attr(a.id)}"><i class="amck"></i><span class="amname">${esc(a.username)}</span><span class="amtag${online ? ' live' : ''}">${tag}</span></button>`;
+  }).join('') : `<p class="hint">${esc(T('amNoAcc'))}</p>`;
+  box.querySelectorAll('[data-vpn-account]').forEach((b) => { b.onclick = () => {
+    const id = b.dataset.vpnAccount; const i = vpnPick.sel.indexOf(id); if (i < 0) vpnPick.sel.push(id); else vpnPick.sel.splice(i, 1);
+    if ((slotInfo.list || []).some((x) => x.accountId === id)) window.toast('Bu hesap şu anda oyunda. VPN, bağlantıyı kesip yeniden bağlandığınızda uygulanacak.', 'info');
+    renderVpnAccountPicker();
+  }; });
+  $('am-count').textContent = vpnPick.sel.length + '/' + list.length;
+}
+async function commitVpnPicker() {
+  if (!vpnPick) return;
+  const ids = [...vpnPick.sel]; const target = ids.length ? ids : null; cfg.tor = { ...(cfg.tor || {}), accountIds: target };
+  await save({ tor: { accountIds: target } }); closeVpnAccountPicker();
+  window.toast(ids.length ? 'VPN seçilen hesaplara atandı.' : 'Hesap seçilmedi; VPN otomatik olarak tüm hesaplarda kullanılacak.', 'info');
+}
+
 /* =============================== CHAT ===================================== */
 const chatBox = $('chat-box');
 // Minecraft renk parcalarini (spans) guvenli HTML'e cevirir
@@ -836,7 +947,10 @@ function afterFeatureChange(key) {
 let featPick = null;
 function openFeatPicker(key) {
   if (!cfg) return;
+  vpnPick = null;
+  $('am-off').classList.remove('hidden');
   featPick = { key, sel: featList(key) };
+  const sub = document.querySelector('#acc-modal [data-i18n="amSub"]'); if (sub) sub.textContent = T('amSub');
   const t = $('am-title'); if (t) t.textContent = featLabel(key);
   renderFeatPicker();
   const m = $('acc-modal'); if (m) m.classList.remove('hidden');
@@ -2399,6 +2513,7 @@ function bindStatic() {
   };
   // Proxies
   $('p-add').onclick = addProxy;
+  if ($('tor-start')) { $('tor-start').onclick = toggleVpn; $('tor-stop').onclick = stopTor; $('tor-new').onclick = newTorIdentity; $('vpn-settings').onclick = openVpnSettings; $('vpn-settings-save').onclick = saveVpnSettings; $('vpn-country').onclick = openVpnCountries; $('vpn-country-done').onclick = saveVpnCountries; $('vpn-country-reset').onclick = resetVpnCountries; renderTor(); }
   // Logs
   $('log-clear').onclick = async () => { await bridge.logs.clear(); logBox.innerHTML = ''; seenLogIds.clear(); window.toast(T('tLogsCleared'), 'info'); };
   $('log-export').onclick = async () => {
@@ -2469,14 +2584,16 @@ function bindStatic() {
   bindSbPop('sb-server-btn', 'sb-server-pop');
   bindSbPop('sb-account-btn', 'sb-account-pop');
   // --- Hesap secme penceresi -----------------------------------------------
-  const amSave = $('am-save'); if (amSave) amSave.onclick = () => { if (featPick) commitFeatPicker(featPick.sel.slice()); };
+  const amSave = $('am-save'); if (amSave) amSave.onclick = () => { if (vpnPick) commitVpnPicker(); else if (featPick) commitFeatPicker(featPick.sel.slice()); };
   // secimi silmeden kapat
   const amOff = $('am-off'); if (amOff) amOff.onclick = () => { if (featPick) commitFeatPicker(featPick.sel.slice(), false); };
-  const amAll = $('am-all'); if (amAll) amAll.onclick = () => { if (featPick) { featPick.sel = accIdList(); renderFeatPicker(); } };
-  const amNone = $('am-none'); if (amNone) amNone.onclick = () => { if (featPick) { featPick.sel = []; renderFeatPicker(); } };
-  const amCan = $('am-cancel'); if (amCan) amCan.onclick = closeFeatPicker;
+  const amAll = $('am-all'); if (amAll) amAll.onclick = () => { if (vpnPick) { vpnPick.sel = accIdList(); renderVpnAccountPicker(); } else if (featPick) { featPick.sel = accIdList(); renderFeatPicker(); } };
+  const amNone = $('am-none'); if (amNone) amNone.onclick = () => { if (vpnPick) { vpnPick.sel = []; renderVpnAccountPicker(); } else if (featPick) { featPick.sel = []; renderFeatPicker(); } };
+  const amCan = $('am-cancel'); if (amCan) amCan.onclick = () => { if (vpnPick) closeVpnAccountPicker(); else closeFeatPicker(); };
   const amMod = $('acc-modal');
-  if (amMod) amMod.addEventListener('click', (e) => { if (e.target === amMod) closeFeatPicker(); });
+  if (amMod) amMod.addEventListener('click', (e) => { if (e.target !== amMod) return; if (vpnPick) closeVpnAccountPicker(); else closeFeatPicker(); });
+  const vpnSettingsMod = $('vpn-settings-modal'); if (vpnSettingsMod) vpnSettingsMod.addEventListener('click', (e) => { if (e.target === vpnSettingsMod) closeVpnSettings(); });
+  const vpnCountryMod = $('vpn-country-modal'); if (vpnCountryMod) vpnCountryMod.addEventListener('click', (e) => { if (e.target === vpnCountryMod) vpnCountryMod.classList.add('hidden'); });
   // --- PANEL'e ayar sabitleme ---------------------------------------------
   const dAdd = $('dash-add'); if (dAdd) dAdd.onclick = openTilePicker;
   const fpSave = $('fp-save');
@@ -2492,8 +2609,11 @@ function bindStatic() {
   if (fpMod) fpMod.addEventListener('click', (e) => { if (e.target === fpMod) closeTilePicker(); });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (featPick) closeFeatPicker();
+    if (vpnPick) closeVpnAccountPicker();
+    else if (featPick) closeFeatPicker();
     if (tilePick) closeTilePicker();
+    if ($('vpn-settings-modal') && !$('vpn-settings-modal').classList.contains('hidden')) closeVpnSettings();
+    if ($('vpn-country-modal') && !$('vpn-country-modal').classList.contains('hidden')) $('vpn-country-modal').classList.add('hidden');
   });
   $('s-reset').onclick = async () => {
     if (!confirm(T('tResetAsk'))) return;

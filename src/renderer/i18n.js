@@ -101,7 +101,7 @@ window.I18N = {
     afkHint: 'Örnek: her 30-60 saniyede bir rastgele hareket.',
     /* --- proxy --- */
     addProxy: 'PROXY EKLE', type: 'Tür', host: 'Adres (host)', port: 'Port',
-    password: 'Şifre', proxyList: 'PROXY LİSTESİ',
+    password: 'Şifre', proxyList: 'PROXY LİSTESİ', vpnTitle: 'VPN', vpnHint: 'Minecraft bağlantısını güvenli VPN ağı üzerinden yönlendir.', vpnLabel: 'VPN', vpnChangeIp: 'IP DEĞİŞTİR', vpnBinary: 'VPN motor yolu (isteğe bağlı)', vpnCountry: 'Ülke', vpnStop: 'VPNİ DURDUR', vpnPrivacy: 'Yalnızca Minecraft bot trafiği yönlendirilir; tarayıcı ve diğer uygulamalar değişmez.', vpnSettingsTitle: 'VPN AYARLARI', vpnPrevent: 'VPN dışı bağlantıları engelle', vpnStream: 'Her sunucu girişinde IP değiştir', vpnButtonsPosition: 'VPN düğmelerinin konumu', vpnLeft: 'Sol', vpnLower: 'Alt', vpnResolve: 'DNS isteklerini VPN ile çöz', vpnDone: 'TAMAM', vpnRegions: 'VPN BÖLGELERİ', vpnNoneSelected: 'Seçim yok → VPN karar verir', vpnEnforce: 'Tüm düğümler için zorla', vpnReset: 'SIFIRLA',
     /* --- kayıtlar --- */
     clearLogs: 'Kayıtları temizle', exportLogs: 'Kayıtları kaydet',
     /* --- ayarlar --- */
@@ -315,7 +315,7 @@ window.I18N = {
     afkLook: 'Look in random directions', intervalCaps: 'INTERVAL',
     afkHint: 'Example: one random movement every 30-60 seconds.',
     addProxy: 'ADD PROXY', type: 'Type', host: 'Host', port: 'Port',
-    password: 'Password', proxyList: 'PROXY LIST',
+    password: 'Password', proxyList: 'PROXY LIST', vpnTitle: 'VPN', vpnHint: 'Route Minecraft through the secure VPN network.', vpnLabel: 'VPN', vpnChangeIp: 'CHANGE IP', vpnBinary: 'VPN engine path (optional)', vpnCountry: 'Country', vpnStop: 'STOP VPN', vpnPrivacy: 'Only Minecraft bot traffic is routed; browser and other apps are not changed.', vpnSettingsTitle: 'VPN SETTINGS', vpnPrevent: 'Prevent non-VPN connections', vpnStream: 'Change IP on every server join', vpnButtonsPosition: 'VPN buttons position', vpnLeft: 'Left', vpnLower: 'Lower', vpnResolve: 'Resolve DNS using VPN', vpnDone: 'DONE', vpnRegions: 'VPN REGIONS', vpnNoneSelected: 'None selected → VPN decides', vpnEnforce: 'Enforce for all nodes', vpnReset: 'RESET',
     clearLogs: 'Clear logs', exportLogs: 'Export logs',
     appearance: 'APPEARANCE', theme: 'Theme', themeDark: 'Dark theme', themeLight: 'Light theme',
     languageCaps: 'LANGUAGE', language: 'Language', general: 'GENERAL',

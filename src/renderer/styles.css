@@ -1213,3 +1213,38 @@ body[data-theme="light"] { --part: #7c3aed; --part-dim: rgba(124, 58, 237, .14);
 /* v1.15.7 - Auto Farm ekranini otomatik canli okur */
 .auto-read-note { color: var(--ok); display: inline-flex; align-items: center; gap: 5px; }
 .auto-read-note::before { content: ''; width: 6px; height: 6px; border-radius: 99px; background: var(--ok); box-shadow: 0 0 0 3px rgba(53,208,127,.12); }
+
+/* ------------------------------- VPN panel -------------------------------- */
+.vpn-card { grid-column: 1 / -1; max-width: 620px; }
+.vpn-buttons { display: grid; grid-template-columns: 1fr 44px; gap: 8px; margin: 8px 0 10px; }
+.vpn-main-btn, .vpn-icon-btn {
+  min-height: 42px; border: 1px solid var(--border-2); border-radius: 6px; background: #252a32;
+  color: var(--text); font: inherit; cursor: pointer; transition: background var(--fast), border-color var(--fast), color var(--fast);
+}
+.vpn-main-btn { text-align: left; padding: 0 14px; letter-spacing: .8px; }
+.vpn-main-btn:hover, .vpn-icon-btn:hover { background: var(--card-3); border-color: var(--accent); }
+.vpn-main-btn b { color: var(--err); }
+.vpn-main-btn b.vpn-on { color: var(--ok); }
+.vpn-icon-btn { font-size: 21px; color: var(--muted); }
+.vpn-icon-btn.globe { font-size: 20px; }
+.vpn-country-caption { color: var(--muted); font-size: 11px; margin: 0 0 10px; }
+.vpn-country-caption b { color: var(--text); font-weight: 600; }
+.vpn-dialog { max-width: 600px; text-align: left; background: rgba(12, 15, 18, .94); border-color: #e6e9ef; border-radius: 2px; }
+.vpn-dialog .modal-title { text-align: center; font-size: 16px; letter-spacing: 1px; }
+.vpn-position-title { text-align: center; color: var(--muted); padding: 8px 0 2px; }
+.vpn-position { display: flex; justify-content: center; gap: 38px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.vpn-country-list { height: min(52vh, 420px); overflow-y: auto; background: rgba(0,0,0,.35); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px 8px; }
+.vpn-country-option { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 4px; cursor: pointer; color: var(--text); }
+.vpn-country-option:hover { color: var(--accent); background: rgba(255,255,255,.04); }
+.vpn-country-option input { accent-color: var(--accent); width: 16px; height: 16px; }
+.vpn-country-option small { margin-left: auto; color: var(--muted); font-family: Consolas, monospace; }
+.vpn-selected-caption { text-align: center; color: var(--muted); padding: 0 0 8px; }
+.country-dialog { max-width: 560px; }
+/* VPN modals follow the active application theme. */
+.vpn-dialog { background: var(--card); border-color: var(--border-2); color: var(--text); }
+.vpn-country-list { background: var(--card-2); }
+.vpn-country-option input { appearance: none; -webkit-appearance: none; position: relative; display: grid; place-items: center; flex: 0 0 17px; width: 17px; height: 17px; margin: 0; border: 1px solid var(--border-2); border-radius: 3px; background: var(--card); }
+.vpn-country-option input:checked { background: var(--accent); border-color: var(--accent); }
+.vpn-country-option input:checked::after { content: '✓'; color: #14181f; font-size: 12px; font-weight: 900; line-height: 1; }
+
+.vpn-main-btn:disabled, .vpn-icon-btn:disabled { opacity: .45; cursor: not-allowed; filter: saturate(.45); }

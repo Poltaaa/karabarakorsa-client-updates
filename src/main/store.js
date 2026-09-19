@@ -123,6 +123,7 @@ const DEFAULTS = {
     }
   },
   proxies: { selected: null, list: [] },
+  tor: { enabled: false, country: '', countries: [], accountIds: null, strictNodes: false, preventNonVpn: true, streamSeparation: false, resolveDns: true },
   accounts: { selected: null, list: [] },
   settings: {
     theme: 'dark',

@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('api', {
     cancelAuto: (slot) => ipcRenderer.invoke('dialog:cancel-auto', slot),
     command: (template, values, slot) => ipcRenderer.invoke('dialog:command', { template, values, slot })
   },
+  tor: { status: () => ipcRenderer.invoke('tor:status'), start: (o) => ipcRenderer.invoke('tor:start', o), stop: () => ipcRenderer.invoke('tor:stop'), newIdentity: () => ipcRenderer.invoke('tor:new-identity'), setCountry: (c) => ipcRenderer.invoke('tor:set-country', c) },
   proxies: {
     add: (p) => ipcRenderer.invoke('proxies:add', p),
     remove: (id) => ipcRenderer.invoke('proxies:remove', id),

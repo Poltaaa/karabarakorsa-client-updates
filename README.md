@@ -4,7 +4,7 @@
 [![Source available](https://img.shields.io/badge/source-available-brightgreen.svg)](#kaynaktan-derleme)
 
 Windows için Electron, Mineflayer ve Minecraft Protocol tabanlı açık kaynak Minecraft AFK istemcisi.
-Bu depo **v1.15.10 / paket 37** kaynak kodunu içerir.
+Bu depo **v1.15.11 / paket 46** kaynak kodunu içerir.
 
 > **Bağımsız proje:** Mojang, Microsoft veya herhangi bir Minecraft sunucusuyla bağlantılı ya da onlar tarafından onaylanmış değildir.
 > Kullandığınız sunucunun bot, AFK ve otomasyon kurallarına uymak sizin sorumluluğunuzdadır.
@@ -49,7 +49,7 @@ npm run verify
 npm start
 ```
 
-Windows'ta alternatif olarak `BASLAT-37.bat` dosyasını çalıştırabilirsiniz.
+Windows'ta alternatif olarak `BASLAT-46.bat` dosyasını çalıştırabilirsiniz.
 
 ## Kaynaktan derleme
 
@@ -69,7 +69,7 @@ npm run verify
 npm run build
 ```
 
-Çıktılar `dist/` klasörüne yazılır. `EXE-OLUSTUR-37.bat` aynı işlemi Windows'ta otomatik yapar.
+Çıktılar `dist/` klasörüne yazılır. `EXE-OLUSTUR-46.bat` aynı işlemi Windows'ta otomatik yapar.
 
 ## İndirilen EXE neden uyarı gösterebilir?
 
@@ -86,7 +86,7 @@ Güvenmek için:
 PowerShell ile SHA-256:
 
 ```powershell
-Get-FileHash '.\Karabarakorsa AFK Client Setup 1.15.10.exe' -Algorithm SHA256
+Get-FileHash '.\Karabarakorsa AFK Client Setup 1.15.11.exe' -Algorithm SHA256
 ```
 
 ## Depo yapısı
@@ -116,3 +116,8 @@ Uygulama ayarları normal kullanımda proje klasörüne değil, Windows kullanı
 - Hata düzeltmeleri için: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Güvenlik açığı bildirmek için: [SECURITY.md](SECURITY.md)
 - Lisans: [MIT](LICENSE)
+
+## VPN modu
+Proxies sayfasındaki VPN paneli, ayrı kurulmuş VPN motorunu yerel SOCKS5 (127.0.0.1:9050) üzerinden başlatır. Bağlantılar VPN üzerinden gönderilir, `NEW IDENTITY` yeni devre ister ve iki harfli ülke kodu ExitNodes seçebilir. VPN sistem geneline uygulanmaz; yalnızca Minecraft bot bağlantısı etkilenir.
+
+VPN motoru Windows x64 için resmi Tor Expert Bundle içindeki `tor.exe` ile birlikte dağıtılır; kullanıcı ayrıca Tor Browser kurmak zorunda değildir.

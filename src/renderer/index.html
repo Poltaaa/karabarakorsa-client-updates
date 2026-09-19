@@ -74,7 +74,7 @@
     <button class="nav" data-page="proxies"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="6" rx="2"/><rect x="2" y="15" width="20" height="6" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg><span data-i18n="navProxies">PROXIES</span></button>
     <button class="nav" data-page="logs"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 10h16"/><path d="M4 15h10"/><path d="M4 20h7"/></svg><span data-i18n="navLogs">LOGS</span></button>
     <button class="nav" data-page="settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span data-i18n="navSettings">SETTINGS</span></button>
-    <div class="sidebar-foot"><span id="foot-ver">v1.15.10</span><span class="made">made by Poltaaa</span></div>
+    <div class="sidebar-foot"><span id="foot-ver">v1.15.11</span><span class="made">made by Poltaaa</span></div>
   </nav>
 
   <!-- ===================== MAIN ===================== -->
@@ -474,6 +474,19 @@
           <div class="card-head" data-i18n="proxyList">PROXY LIST</div>
           <div class="list" id="proxy-list"></div>
         </div>
+        <div class="card vpn-card">
+          <div class="card-head"><span data-i18n="vpnTitle">VPN</span><span class="head-note" id="tor-status">OFF</span></div>
+          <p class="hint" data-i18n="vpnHint">Minecraft bağlantısını güvenli VPN ağı üzerinden yönlendir.</p>
+          <div class="vpn-buttons">
+            <button class="vpn-main-btn" id="tor-start"><span data-i18n="vpnLabel">VPN</span>: <b id="vpn-state">OFF</b></button>
+            <button class="vpn-icon-btn" id="vpn-settings" title="VPN settings">⚙</button>
+            <button class="vpn-main-btn" id="tor-new" disabled><span data-i18n="vpnChangeIp">CHANGE IP</span></button>
+            <button class="vpn-icon-btn globe" id="vpn-country" title="VPN country">🌐</button>
+          </div>
+          <div class="vpn-country-caption"><span data-i18n="vpnCountry">Country</span>: <b id="vpn-country-name">Automatic</b></div>
+          <button class="btn ghost tiny" id="tor-stop" data-i18n="vpnStop">STOP VPN</button>
+          <p class="hint" data-i18n="vpnPrivacy">Only Minecraft bot traffic is routed. Browser and other apps are not changed.</p>
+        </div>
       </div>
     </section>
 
@@ -607,6 +620,27 @@
       <button class="btn primary grow" id="fp-save" data-i18n="amSave">SAVE</button>
       <button class="btn ghost grow" id="fp-cancel" data-i18n="cancel">CANCEL</button>
     </div>
+  </div>
+</div>
+
+<!-- VPN settings -->
+<div class="modal hidden" id="vpn-settings-modal">
+  <div class="modal-card vpn-dialog">
+    <div class="modal-title" data-i18n="vpnSettingsTitle">VPN SETTINGS</div>
+    <label class="check"><input type="checkbox" id="vpn-prevent" /><span data-i18n="vpnPrevent">Prevent non-VPN connections</span></label>
+    <label class="check"><input type="checkbox" id="vpn-stream" /><span data-i18n="vpnStream">Change IP on every server join</span></label>
+    <label class="check"><input type="checkbox" id="vpn-dns" /><span data-i18n="vpnResolve">Resolve DNS using VPN</span></label>
+    <div class="row gap"><button class="btn primary grow" id="vpn-settings-save" data-i18n="vpnDone">DONE</button></div>
+  </div>
+</div>
+<!-- VPN country picker -->
+<div class="modal hidden" id="vpn-country-modal">
+  <div class="modal-card vpn-dialog country-dialog">
+    <div class="modal-title" data-i18n="vpnRegions">VPN REGIONS</div>
+    <div class="vpn-selected-caption" data-i18n="vpnNoneSelected">None selected → VPN decides</div>
+    <div class="vpn-country-list" id="vpn-country-list"></div>
+    <label class="check"><input type="checkbox" id="vpn-strict" /><span data-i18n="vpnEnforce">Enforce for all nodes</span></label>
+    <div class="row gap"><button class="btn ghost grow" id="vpn-country-reset" data-i18n="vpnReset">RESET</button><button class="btn primary grow" id="vpn-country-done" data-i18n="vpnDone">DONE</button></div>
   </div>
 </div>
 

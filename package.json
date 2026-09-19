@@ -1,7 +1,7 @@
 {
   "name": "karabarakorsa-client",
   "productName": "Karabarakorsa AFK Client",
-  "version": "1.15.10",
+  "version": "1.15.11",
   "description": "Karabarakorsa AFK Client - Professional Minecraft AFK Client for Windows",
   "main": "src/main/main.js",
   "author": "Karabarakorsa",
@@ -45,6 +45,10 @@
       {
         "from": "build/tray16.png",
         "to": "tray16.png"
+      },
+      {
+        "from": "resources/tor",
+        "to": "tor"
       }
     ],
     "win": {

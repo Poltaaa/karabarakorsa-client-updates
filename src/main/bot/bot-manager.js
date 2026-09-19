@@ -139,7 +139,14 @@ class BotManager extends EventEmitter {
     return this.spawnBot();
   }
 
-  spawnBot() {
+  async spawnBot() {
+    if (this.cfg && this.cfg.tor && this.cfg.tor.enabled && this.cfg.tor.streamSeparation && typeof this.cfg.vpnNewIdentity === 'function') {
+      try { await this.cfg.vpnNewIdentity(); }
+      catch (e) {
+        const msg = this.logger.L("Seçilen ülkelerde uygun VPN IP'si bulunamadı: ", "No suitable VPN IP was found in the selected countries: ") + e.message;
+        this.lastError = msg; this.logger.error(msg); this.setStatus('OFFLINE'); this.scheduleReconnect(); return { ok: false, error: msg };
+      }
+    }
     const c = this.cfg.connection;
     const t = this.cfg.toggles;
     const acc = this.account || { username: 'Player', type: 'offline' };
@@ -190,7 +197,7 @@ class BotManager extends EventEmitter {
     }
 
     if (t.proxy && this.proxy) {
-      const connect = buildConnect(this.proxy, this.logger);
+      const connect = buildConnect(this.proxy, this.logger, { host: options.host, port: options.port });
       if (connect) options.connect = connect;
       this.logger.info(`Proxy kullaniliyor: ${this.proxy.type}://${this.proxy.host}:${this.proxy.port}`);
     }
