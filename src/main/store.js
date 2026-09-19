@@ -123,7 +123,7 @@ const DEFAULTS = {
     }
   },
   proxies: { selected: null, list: [] },
-  tor: { enabled: false, country: '', countries: [], accountIds: null, strictNodes: false, preventNonVpn: true, streamSeparation: false, resolveDns: true },
+  tor: { enabled: false, connectionEnabled: false, country: '', countries: [], accountIds: null, strictNodes: false, preventNonVpn: true, streamSeparation: false, resolveDns: true },
   accounts: { selected: null, list: [] },
   settings: {
     theme: 'dark',
@@ -134,6 +134,7 @@ const DEFAULTS = {
     lowCpuMode: false,
     memoryOptimization: true,
     packetLog: false,         // hata ayiklama: tum paket adlarini logla
+    autoScrollLogs: true,
     dashTiles: []             // PANEL sayfasina eklenen hizli ayarlar
   }
 };

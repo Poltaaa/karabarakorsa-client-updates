@@ -25,6 +25,23 @@ const LEGACY_STYLE = { k: 'o', l: 'b', m: 's', n: 'u', o: 'i' };
 const MAX_SPANS = 120;
 const MAX_CHARS = 2000;
 
+const FALLBACK_TRANSLATES = {
+  'chat.type.text': '<%s> %s',
+  'chat.type.announcement': '[%s] %s',
+  'commands.message.display.incoming': '%s whispers: %s',
+  'commands.message.display.outgoing': 'You whisper to %s: %s',
+  'commands.teammsg.format': '[%s] %s',
+  'commands.me': '* %s %s',
+  'commands.ban.success': 'Banned %s',
+  'commands.ban.ip.success': 'Banned IP %s',
+  'commands.pardon.success': 'Unbanned %s',
+  'commands.kick.success': 'Kicked %s',
+  'commands.whitelist.add.success': 'Added %s to the whitelist',
+  'commands.whitelist.remove.success': 'Removed %s from the whitelist',
+  'multiplayer.player.joined': '%s joined the game',
+  'multiplayer.player.left': '%s left the game'
+};
+
 function colorOf(c) {
   if (!c) return '';
   const s = String(c).trim().toLowerCase();
@@ -120,6 +137,13 @@ function walk(node, inherit, out, lang, depth) {
     node.forEach((n) => walk(n, inherit, out, lang, depth + 1));
     return;
   }
+  // prismarine-chat uses ChatMessage instances inside translate `with` args.
+  // Their rendered component is stored in `.json`; walking the wrapper itself
+  // would silently drop player names and other arguments.
+  if (node && node.json !== undefined && node.json !== node) {
+    walk(node.json, inherit, out, lang, depth + 1);
+    return;
+  }
   const st = styleFrom(node, inherit);
 
   if (typeof node.text === 'string') pushText(out, node.text, st);
@@ -127,9 +151,21 @@ function walk(node, inherit, out, lang, depth) {
     const args = Array.isArray(node.with) ? node.with : [];
     const pat = (lang && typeof lang[node.translate] === 'string') ? lang[node.translate] : null;
     if (pat === null) {
-      // Dil dosyasinda yok: anahtar yerine varsa parametreleri goster
-      if (args.length) args.forEach((a, ix) => { if (ix) pushText(out, ' ', st); walk(a, st, out, lang, depth + 1); });
-      else pushText(out, node.translate, st);
+      // Dil dosyasında yoksa yaygın Minecraft mesaj şablonlarını kullan; böylece
+      // /msg göndereni, banlanan oyuncu ve benzeri argümanlar kaybolmaz.
+      const fallback = FALLBACK_TRANSLATES[node.translate];
+      if (fallback) {
+        const re = /%s/g; let last = 0; let ix = 0; let m;
+        while ((m = re.exec(fallback)) !== null) {
+          if (m.index > last) pushText(out, fallback.slice(last, m.index), st);
+          if (args[ix] !== undefined) walk(args[ix], st, out, lang, depth + 1); else pushText(out, '?', st);
+          ix++; last = m.index + 2;
+        }
+        if (last < fallback.length) pushText(out, fallback.slice(last), st);
+        for (; ix < args.length; ix++) { pushText(out, ' ', st); walk(args[ix], st, out, lang, depth + 1); }
+      } else if (args.length) {
+        args.forEach((a, ix) => { if (ix) pushText(out, ' ', st); walk(a, st, out, lang, depth + 1); });
+      } else pushText(out, node.translate, st);
     } else {
       const re = /%(?:(\d+)\$)?s|%%/g;
       let last = 0, auto = 0, m;

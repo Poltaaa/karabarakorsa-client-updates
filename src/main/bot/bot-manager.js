@@ -356,7 +356,12 @@ class BotManager extends EventEmitter {
       let spans = [];
       try { flat = msg && typeof msg.toString === 'function' ? msg.toString() : String(msg == null ? '' : msg); } catch (_) { flat = ''; }
       try { spans = chatFmt.spansOf(msg, bot.registry && bot.registry.language); } catch (_) { spans = []; }
-      if (!spans.length && flat) spans = [{ t: flat }];
+      const spanText = chatFmt.flatten(spans);
+      // Some server components are rendered partially by the registry language
+      // table. Prefer the longest complete representation so names/arguments do
+      // not disappear from /msg, moderation and announcement messages.
+      if (spanText && flat && spanText.length > flat.length) flat = spanText;
+      if (!spans.length || (flat && chatFmt.flatten(spans) !== flat)) spans = flat ? [{ t: flat }] : spans;
       const from = this.senderName(bot, senderUuid);
       // Sunucu adi mesajin icine koymadiysa basina biz ekleyelim
       let show = from && flat.indexOf(from) === -1 ? from : '';

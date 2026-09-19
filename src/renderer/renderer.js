@@ -100,6 +100,10 @@ const save = (patch) => bridge.config.patch(patch).then((data) => { cfg = data; 
 async function boot() {
   if (!bridge) return;
   cfg = await bridge.config.get();
+  const initialLogAuto = $('log-autoscroll'); if (initialLogAuto) initialLogAuto.checked = cfg.settings.autoScrollLogs !== false;
+  const initialDashAuto = $('dash-autoscroll'); if (initialDashAuto) initialDashAuto.checked = cfg.settings.autoScrollLogs !== false;
+  const initialChatAuto = $('chat-autoscroll'); if (initialChatAuto) initialChatAuto.checked = cfg.settings.autoScrollLogs !== false;
+  const initialPanelAuto = $('panel-autoscroll'); if (initialPanelAuto) initialPanelAuto.checked = cfg.settings.autoScrollLogs !== false;
   window.__lang = cfg.settings.language;
   document.body.dataset.theme = cfg.settings.theme;
 
@@ -546,7 +550,7 @@ function vpnCountryName() {
 async function renderTor() {
   if (!bridge.tor || !cfg) return;
   const vpn = cfg.tor || (cfg.tor = {});
-  const r = await bridge.tor.status(); const on = !!(r && r.running);
+  const r = await bridge.tor.status(); const on = vpn.enabled === true && vpn.connectionEnabled === true && !!(r && r.running);
   const el = $('tor-status'); if (el) { el.textContent = on ? 'ON' : 'OFF'; el.classList.toggle('on', on); }
   if ($('vpn-state')) { $('vpn-state').textContent = on ? 'ON' : 'OFF'; $('vpn-state').classList.toggle('vpn-on', on); }
   if ($('tor-new')) $('tor-new').disabled = !on || vpnBusy;
@@ -564,17 +568,17 @@ async function startTor() {
   try {
     const t = cfg.tor || {};
     const r = await bridge.tor.start({ countries: t.countries || [], strictNodes: !!t.strictNodes });
-    if (r && r.ok) { cfg.tor = { ...t, enabled: true, country: r.status.country }; await save({ tor: cfg.tor }); window.toast('VPN aktif.', 'ok'); }
-    else { cfg.tor = { ...t, enabled: false }; await save({ tor: { enabled: false } }); window.toast((r && r.error) || 'VPN başlatılamadı.', 'error'); }
+    if (r && r.ok) { cfg.tor = { ...t, enabled: true, connectionEnabled: true, country: r.status.country }; await save({ tor: cfg.tor }); window.toast('VPN aktif.', 'ok'); }
+    else { cfg.tor = { ...t, enabled: false, connectionEnabled: false }; await save({ tor: { enabled: false, connectionEnabled: false } }); window.toast((r && r.error) || 'VPN başlatılamadı.', 'error'); }
   } finally { vpnBusy = false; renderTor(); }
 }
 async function stopTor() {
   if (vpnBusy) return;
   vpnBusy = true; renderTor();
-  try { await bridge.tor.stop(); cfg.tor = { ...(cfg.tor || {}), enabled: false }; await save({ tor: { enabled: false } }); window.toast('VPN kapatıldı.', 'info'); }
+  try { await bridge.tor.stop(); cfg.tor = { ...(cfg.tor || {}), enabled: false, connectionEnabled: false }; await save({ tor: { enabled: false, connectionEnabled: false } }); window.toast('VPN kapatıldı.', 'info'); }
   finally { vpnBusy = false; renderTor(); }
 }
-async function newTorIdentity() { if (vpnBusy || ($('tor-new') && $('tor-new').disabled)) return; const r = await bridge.tor.newIdentity(); window.toast(r && r.ok ? 'VPN IP adresi değiştirildi.' : ((r && r.error) || 'VPN IP değiştirilemedi.'), r && r.ok ? 'ok' : 'error'); renderTor(); }
+async function newTorIdentity() { if (!cfg || !cfg.tor || cfg.tor.enabled !== true || cfg.tor.connectionEnabled !== true || vpnBusy || ($('tor-new') && $('tor-new').disabled)) return; const r = await bridge.tor.newIdentity(); window.toast(r && r.ok ? 'VPN IP adresi değiştirildi.' : ((r && r.error) || 'VPN IP değiştirilemedi.'), r && r.ok ? 'ok' : 'error'); renderTor(); }
 async function toggleVpn() { if (vpnBusy) return; const r = await bridge.tor.status(); return r && r.running ? stopTor() : startTor(); }
 function openVpnSettings() { $('vpn-settings-modal').classList.remove('hidden'); renderTor(); }
 function closeVpnSettings() { $('vpn-settings-modal').classList.add('hidden'); }
@@ -594,13 +598,18 @@ function renderVpnCountryList() {
 }
 function openVpnCountries() { if (!cfg) return; renderVpnCountryList(); $('vpn-strict').checked = !!(cfg.tor && cfg.tor.strictNodes); $('vpn-country-modal').classList.remove('hidden'); }
 async function saveVpnCountries() {
+  if (!cfg) return;
   const countries = [...document.querySelectorAll('[data-vpn-code]:checked')].map((x) => x.dataset.vpnCode);
-  cfg.tor = { ...(cfg.tor || {}), countries, country: countries.join(','), strictNodes: $('vpn-strict').checked };
-  const r = await bridge.tor.setCountry({ countries, strictNodes: $('vpn-strict').checked });
-  if (r && !r.ok) return window.toast(r.error || 'Ülke seçimi uygulanamadı.', 'error');
-  await save({ tor: cfg.tor }); $('vpn-country-modal').classList.add('hidden'); renderTor(); window.toast('VPN ülkesi güncellendi.', 'ok');
-  if (countries.length) openVpnAccountPicker();
-  else { cfg.tor = { ...(cfg.tor || {}), accountIds: null }; await save({ tor: { accountIds: null } }); window.toast('Otomatik ülke seçimi tüm hesaplara uygulanacak.', 'info'); }
+  const strictNodes = $('vpn-strict').checked;
+  const oldCountries = (cfg.tor && cfg.tor.countries) || [];
+  const oldStrict = !!(cfg.tor && cfg.tor.strictNodes);
+  const changed = JSON.stringify(oldCountries) !== JSON.stringify(countries) || oldStrict !== strictNodes;
+  $('vpn-country-modal').classList.add('hidden');
+  if (!changed) return;
+  const next = { ...(cfg.tor || {}), countries, country: countries.join(','), strictNodes };
+  const r = await bridge.tor.setCountry({ countries, strictNodes });
+  if (r && !r.ok) { window.toast(r.error || 'Ülke seçimi uygulanamadı.', 'error'); return; }
+  await save({ tor: next }); renderTor(); window.toast('VPN ülkesi güncellendi.', 'ok');
 }
 function resetVpnCountries() { document.querySelectorAll('[data-vpn-code]').forEach((x) => { x.checked = false; }); $('vpn-strict').checked = false; }
 let vpnPick = null;
@@ -651,6 +660,17 @@ function spanHtml(spans) {
     return `<span class="${cls.join(' ')}"${col}>${esc(s.t)}</span>`;
   }).join('');
 }
+const pendingChatScrolls = new WeakSet();
+function scrollChatToBottom(box, enabled) {
+  if (!box || !enabled || pendingChatScrolls.has(box)) return;
+  pendingChatScrolls.add(box);
+  const run = () => {
+    pendingChatScrolls.delete(box);
+    if (box.isConnected) box.scrollTop = box.scrollHeight;
+  };
+  if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(run);
+  else window.setTimeout(run, 0);
+}
 function addChatLine(entry, skipFilter) {
   if (!entry) return;
   // Baska bir hesabin sohbeti: satir yazilmaz, o sekmede okunmamis isareti cikar
@@ -672,15 +692,20 @@ function addChatLine(entry, skipFilter) {
     div.innerHTML = html;
     box.appendChild(div);
     while (box.childElementCount > cap) box.removeChild(box.firstChild);
-    box.scrollTop = box.scrollHeight;
+    if (box === document.getElementById('dash-chat')) {
+      scrollChatToBottom(box, cfg && cfg.settings && cfg.settings.autoScrollLogs !== false);
+    } else {
+      scrollChatToBottom(box, true);
+    }
   };
   const div = document.createElement('div');
   div.className = 'line ' + cls;
   div.innerHTML = html;
   chatBox.appendChild(div);
   while (chatBox.childElementCount > limit) chatBox.removeChild(chatBox.firstChild);
-  if ($('chat-autoscroll').checked) chatBox.scrollTop = chatBox.scrollHeight;
-  put(document.getElementById('dash-chat'), 60);   // panelde sadece son satirlar
+  scrollChatToBottom(chatBox, $('chat-autoscroll') ? $('chat-autoscroll').checked : true);
+  const dash = document.getElementById('dash-chat');
+  put(dash, 60);   // panelde sadece son satirlar
 }
 async function sendChat(inputId) {
   const el = $(inputId || 'chat-input');
@@ -841,6 +866,7 @@ const FEATURE_I18N = {
 const FEATURE_PAGE = { macroFarmer: 'macrosCaps', autoSpam: 'navSpam' };
 
 function featLabel(key) { return T(FEATURE_I18N[key] || key); }
+const PANEL_KEYS = FEATURE_KEYS.concat(['autoScrollLogs']);
 function accIdList() {
   const l = (cfg && cfg.accounts && cfg.accounts.list) ? cfg.accounts.list : [];
   return l.map((a) => a.id);
@@ -1000,14 +1026,14 @@ async function commitFeatPicker(ids, enabled) {
 /* --- PANEL'e sabitlenen ayarlar ------------------------------------------ */
 function dashTiles() {
   const l = (cfg && cfg.settings && cfg.settings.dashTiles) || [];
-  return Array.isArray(l) ? l.filter((k) => FEATURE_KEYS.indexOf(k) !== -1) : [];
+  return Array.isArray(l) ? l.filter((k) => PANEL_KEYS.indexOf(k) !== -1) : [];
 }
 // PANEL'deki anahtarlar SADECE o an secili hesaba etki eder: hesap sormaz.
 function renderDashTiles() {
   const box = $('dash-tiles'); if (!box) return;
   const keys = dashTiles();
   box.innerHTML = keys.map((k) => `<label class="check dashtile" data-tip-key="${k}">
-      <input type="checkbox" data-featacc="${k}" />
+      <input type="checkbox" ${k === 'autoScrollLogs' ? 'data-logauto="1"' : `data-featacc="${k}"`} />
       <span>${esc(featLabel(k))}</span>
       <button class="icon-btn dtx" data-dtx="${k}" title="${attr(T('remove'))}">×</button>
     </label>`).join('');
@@ -1021,9 +1047,15 @@ function renderDashTiles() {
     };
   });
   box.querySelectorAll('[data-featacc]').forEach((el) => {
-    el.addEventListener('click', (e) => {
+    el.addEventListener('click', (e) => { e.preventDefault(); toggleFeatureForActive(el.dataset.featacc); });
+  });
+  box.querySelectorAll('[data-logauto]').forEach((el) => {
+    el.checked = !cfg || !cfg.settings || cfg.settings.autoScrollLogs !== false;
+    el.addEventListener('click', async (e) => {
       e.preventDefault();
-      toggleFeatureForActive(el.dataset.featacc);
+      el.checked = !el.checked;
+      await save({ settings: { autoScrollLogs: el.checked } });
+      [$('log-autoscroll'), $('dash-autoscroll'), $('chat-autoscroll'), $('panel-autoscroll')].forEach((x) => { if (x) x.checked = el.checked; });
     });
   });
   paintDashTiles();
@@ -1031,10 +1063,8 @@ function renderDashTiles() {
 // Panelde secili hesabin durumu
 function paintDashTiles() {
   const acc = activeAccountId();
-  document.querySelectorAll('[data-featacc]').forEach((el) => {
-    el.checked = featOnFor(el.dataset.featacc, acc);
-    el.classList.remove('part');
-  });
+  document.querySelectorAll('[data-featacc]').forEach((el) => { el.checked = featOnFor(el.dataset.featacc, acc); el.classList.remove('part'); });
+  document.querySelectorAll('[data-logauto]').forEach((el) => { el.checked = !cfg || !cfg.settings || cfg.settings.autoScrollLogs !== false; });
   const who = $('dash-quick-who');
   if (who) {
     const a = (cfg && cfg.accounts && cfg.accounts.list || []).find((x) => x.id === acc);
@@ -1069,10 +1099,10 @@ function closeTilePicker() {
 function renderTilePicker() {
   if (!tilePick) return;
   const box = $('fp-list'); if (!box) return;
-  box.innerHTML = FEATURE_KEYS.map((k) => {
+  box.innerHTML = PANEL_KEYS.map((k) => {
     const on = tilePick.indexOf(k) !== -1;
-    const st = featState(k);
-    const tag = T(FEATURE_PAGE[k] || 'navConnect');
+    const st = k === 'autoScrollLogs' ? ((!cfg || !cfg.settings || cfg.settings.autoScrollLogs === false) ? 'off' : 'all') : featState(k);
+    const tag = k === 'autoScrollLogs' ? T('logs') : T(FEATURE_PAGE[k] || 'navConnect');
     return `<button class="amrow${on ? ' on' : ''}" data-fpk="${k}">
       <i class="amck"></i><span class="amname">${esc(featLabel(k))}</span>
       <span class="amtag${st === 'off' ? '' : ' live'}">${esc(tag)}</span></button>`;
@@ -2045,7 +2075,7 @@ function addLogLine(e) {
   logBox.appendChild(div);
   const logLimit = cfg && cfg.settings.memoryOptimization ? 400 : 800;
   while (logBox.childElementCount > logLimit) logBox.removeChild(logBox.firstChild);
-  logBox.scrollTop = logBox.scrollHeight;
+  if ($('log-autoscroll') && $('log-autoscroll').checked) logBox.scrollTop = logBox.scrollHeight;
 }
 
 /* ============================== SETTINGS ================================== */
@@ -2513,8 +2543,23 @@ function bindStatic() {
   };
   // Proxies
   $('p-add').onclick = addProxy;
-  if ($('tor-start')) { $('tor-start').onclick = toggleVpn; $('tor-stop').onclick = stopTor; $('tor-new').onclick = newTorIdentity; $('vpn-settings').onclick = openVpnSettings; $('vpn-settings-save').onclick = saveVpnSettings; $('vpn-country').onclick = openVpnCountries; $('vpn-country-done').onclick = saveVpnCountries; $('vpn-country-reset').onclick = resetVpnCountries; renderTor(); }
+  if ($('tor-start')) { $('tor-start').onclick = toggleVpn; $('tor-new').onclick = newTorIdentity; $('vpn-settings').onclick = openVpnSettings; $('vpn-settings-save').onclick = saveVpnSettings; $('vpn-country').onclick = openVpnCountries; $('vpn-country-done').onclick = saveVpnCountries; $('vpn-country-reset').onclick = resetVpnCountries; renderTor(); }
   // Logs
+  const logAuto = $('log-autoscroll');
+  const dashAuto = $('dash-autoscroll');
+  const chatAuto = $('chat-autoscroll');
+  const panelAuto = $('panel-autoscroll');
+  const setAutoScroll = async (value, source) => {
+    if (cfg) await save({ settings: { autoScrollLogs: !!value } });
+    const v = !!value;
+    [logAuto, dashAuto, chatAuto, panelAuto].forEach((el) => { if (el && source !== el) el.checked = v; });
+    const tile = document.querySelector('[data-logauto]'); if (tile && source !== tile) tile.checked = v;
+  };
+  [logAuto, dashAuto, chatAuto, panelAuto].forEach((el) => {
+    if (!el) return;
+    el.checked = !cfg || !cfg.settings || cfg.settings.autoScrollLogs !== false;
+    el.onchange = () => setAutoScroll(el.checked, el);
+  });
   $('log-clear').onclick = async () => { await bridge.logs.clear(); logBox.innerHTML = ''; seenLogIds.clear(); window.toast(T('tLogsCleared'), 'info'); };
   $('log-export').onclick = async () => {
     const r = await bridge.logs.export();

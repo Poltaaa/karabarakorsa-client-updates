@@ -87,7 +87,10 @@
         <div class="card dash-chat">
           <div class="card-head">
             <span data-i18n="liveChat">LIVE CHAT</span>
-            <span class="head-note" id="dash-chat-note">-</span>
+            <div class="row gap">
+              <label class="check tiny-check"><input type="checkbox" id="dash-autoscroll" checked /><span data-i18n="autoScroll">Auto-scroll</span></label>
+              <span class="head-note" id="dash-chat-note">-</span>
+            </div>
           </div>
           <div class="console soft" id="dash-chat"></div>
           <div class="row gap send-row">
@@ -124,6 +127,7 @@
           <div class="card dash-quick">
             <div class="card-head"><span data-i18n="dashQuick">QUICK SETTINGS</span><span class="head-note" id="dash-quick-who">-</span></div>
             <div class="check-list" id="dash-tiles"></div>
+            <label class="check tiny-check panel-auto-row"><input type="checkbox" id="panel-autoscroll" checked /><span data-i18n="autoScroll">Auto-scroll</span></label>
             <div class="row wrap gap qrow">
               <button class="btn tiny" id="q-spam" data-i18n="qSpamStart">Start Auto Spam</button>
               <button class="btn tiny" id="q-join" data-i18n="qJoin">Run Join Messages</button>
@@ -484,8 +488,6 @@
             <button class="vpn-icon-btn globe" id="vpn-country" title="VPN country">🌐</button>
           </div>
           <div class="vpn-country-caption"><span data-i18n="vpnCountry">Country</span>: <b id="vpn-country-name">Automatic</b></div>
-          <button class="btn ghost tiny" id="tor-stop" data-i18n="vpnStop">STOP VPN</button>
-          <p class="hint" data-i18n="vpnPrivacy">Only Minecraft bot traffic is routed. Browser and other apps are not changed.</p>
         </div>
       </div>
     </section>
@@ -505,6 +507,7 @@
             <label class="check tiny-check"><input type="checkbox" data-lvl="RECONNECT" checked /><span>RECONNECT</span></label>
           </div>
           <div class="row gap">
+            <label class="check tiny-check"><input type="checkbox" id="log-autoscroll" checked /><span data-i18n="autoScroll">Auto-scroll</span></label>
             <button class="btn tiny" id="log-clear" data-i18n="clearLogs">Clear logs</button>
             <button class="btn tiny" id="log-export" data-i18n="exportLogs">Export logs</button>
           </div>
