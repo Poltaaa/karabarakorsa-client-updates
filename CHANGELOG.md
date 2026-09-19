@@ -1,6 +1,6 @@
 # Değişiklik Günlüğü
 
-## 1.15.11
+## 1.15.12
 
 - ESC tuşundaki eski güncelleme penceresi çağrısı kaldırıldı.
 - Küçültme normal Windows görev çubuğu davranışına döndürüldü.
