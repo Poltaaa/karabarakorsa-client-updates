@@ -1,5 +1,5 @@
 @echo off
-title Karabarakorsa AFK Client v1.15.13 (paket 68)
+title Karabarakorsa AFK Client v1.15.13 (paket 69)
 cd /d "%~dp0"
 
 where node >nul 2>nul

@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Karabarakorsa AFK Client</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body data-theme="dark">
+<div id="fatal" class="fatal hidden">
+  <button id="fatal-close" class="fatal-x" data-i18n-title="close" title="Close">×</button>
+  <div id="fatal-text"></div>
+</div>
+
+<!-- ===================== TITLE BAR ===================== -->
+<header class="titlebar">
+  <div class="brand">
+    <img class="logo" src="assets/logo.png" alt="Karabarakorsa" draggable="false" />
+    <div class="brand-text">
+      <span class="brand-name">Karabarakorsa</span>
+      <span class="brand-sub">AFK Client</span>
+    </div>
+  </div>
+
+  <div class="statusbar" id="statusbar">
+    <span class="pill" id="pill-status"><i class="dot off"></i><b>OFFLINE</b></span>
+    <span class="sep"></span>
+    <div class="sbwrap">
+      <button class="sb sb-btn" id="sb-server-btn"><label data-i18n="server">Server</label><b id="sb-server">-</b><i class="sb-more hidden" id="sb-server-more">+</i></button>
+      <div class="sbpop" id="sb-server-pop"></div>
+    </div>
+    <div class="sbwrap">
+      <button class="sb sb-btn" id="sb-account-btn"><label data-i18n="account">Account</label><b id="sb-account">-</b><i class="sb-more hidden" id="sb-account-more">+</i></button>
+      <div class="sbpop" id="sb-account-pop"></div>
+    </div>
+    <div class="statwrap">
+      <button class="statchip" id="stat-toggle" data-i18n-title="statChip" title="Ping, uptime, CPU, RAM">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2.5" y="6.5" width="19" height="11" rx="2.5"/>
+          <path d="M6 17.5v2.6M10 17.5v2.6M14 17.5v2.6M18 17.5v2.6"/>
+          <path d="M6.5 10.5h2.4M10.8 10.5h2.4M15.1 10.5h2.4"/>
+        </svg>
+        <i class="statdot" id="stat-dot"></i>
+      </button>
+      <div class="statpop" id="stat-pop">
+        <div class="statrow"><label data-i18n="ping">Ping</label><b id="sb-ping">-</b></div>
+        <div class="statrow"><label data-i18n="uptime">Uptime</label><b id="sb-uptime">00:00:00</b></div>
+        <div class="statrow"><label>CPU</label><b id="sb-cpu">0%</b></div>
+        <div class="statrow"><label>RAM</label><b id="sb-ram">0 MB</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="win-controls">
+    <button class="updbtn hidden" id="upd-btn" data-i18n-title="updTitle" title="A new version is available">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5.5 11.5 12 5l6.5 6.5"/></svg>
+      <span data-i18n="updBtn">UPDATE</span><b id="upd-btn-ver"></b>
+    </button>
+    <button id="win-min" data-i18n-title="winMin" title="Minimize"><svg viewBox="0 0 12 12"><path d="M2 6h8" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <button id="win-max" data-i18n-title="winMax" title="Maximize"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <button id="win-close" class="danger" data-i18n-title="winClose" title="Close"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.2"/></svg></button>
+  </div>
+</header>
+
+<div class="shell">
+  <!-- ===================== SIDEBAR ===================== -->
+  <nav class="sidebar">
+    <button class="nav active" data-page="dashboard"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span data-i18n="navDashboard">DASHBOARD</span><b class="screen-alert nav-alert hidden" id="nav-panel-alert">!</b></button>
+    <button class="nav" data-page="connect"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/></svg><span data-i18n="navConnect">CONNECT</span></button>
+    <button class="nav" data-page="chat"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span data-i18n="navChat">CHAT</span></button>
+    <button class="nav" data-page="join"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg><span data-i18n="navJoin">JOIN MESSAGES</span></button>
+    <button class="nav" data-page="macros"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 10 2.5 2L8 14"/><path d="M13 14h4"/></svg><span data-i18n="navMacros">MACROS</span></button>
+    <button class="nav" data-page="spam"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg><span data-i18n="navSpam">AUTO SPAM</span></button>
+    <button class="nav" data-page="accounts"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg><span data-i18n="navAccounts">ACCOUNTS</span></button>
+    <button class="nav" data-page="proxies"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="6" rx="2"/><rect x="2" y="15" width="20" height="6" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg><span data-i18n="navProxies">PROXIES</span></button>
+    <button class="nav" data-page="logs"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 10h16"/><path d="M4 15h10"/><path d="M4 20h7"/></svg><span data-i18n="navLogs">LOGS</span></button>
+    <button class="nav" data-page="settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span data-i18n="navSettings">SETTINGS</span></button>
+    <div class="sidebar-foot"><span id="foot-ver">v1.15.13</span><span class="made">made by Poltaaa</span></div>
+  </nav>
+
+  <!-- ===================== MAIN ===================== -->
+  <main class="content">
+
+    <!-- ---------- DASHBOARD ---------- -->
+    <section class="page active" id="page-dashboard">
+      <div class="dash">
+
+        <div class="card dash-chat">
+          <div class="card-head">
+            <span data-i18n="liveChat">LIVE CHAT</span>
+            <div class="row gap">
+              <span class="head-note" id="dash-chat-note">-</span>
+            </div>
+          </div>
+          <div class="console soft" id="dash-chat"></div>
+          <div class="row gap send-row">
+            <input id="dash-chat-input" data-i18n-ph="chatPh" placeholder="..." />
+            <button class="btn primary" id="dash-chat-send" data-i18n="send">Send</button>
+          </div>
+        </div>
+
+        <div class="dash-side">
+          <div class="card dash-now">
+            <div class="card-head"><span data-i18n="dashNow">CONNECTION</span></div>
+            <div class="now-main">
+              <i class="now-dot" id="now-dot"></i>
+              <div class="now-text">
+                <b id="now-status">OFFLINE</b>
+                <span id="now-server">-</span>
+              </div>
+            </div>
+            <div class="now-grid">
+              <div><label data-i18n="ping">Ping</label><b id="d-ping">-</b></div>
+              <div><label data-i18n="dashSessions">Sessions</label><b id="d-count">0</b></div>
+            </div>
+            <div class="row gap mt">
+              <button class="btn primary grow" id="q-connect" data-i18n="btnConnect">Connect</button>
+              <button class="btn ghost grow" id="q-disconnect" data-i18n="btnDisconnect">Disconnect</button>
+            </div>
+          </div>
+
+          <div class="card dash-sessions">
+            <div class="card-head"><span data-i18n="dashActive">ACTIVE ACCOUNTS</span></div>
+            <div class="list slim" id="dash-list"></div>
+          </div>
+
+          <div class="card dash-quick">
+            <div class="card-head"><span data-i18n="dashQuick">QUICK SETTINGS</span><span class="head-note" id="dash-quick-who">-</span></div>
+            <div class="check-list" id="dash-tiles"></div>
+            <div class="row wrap gap qrow">
+              <button class="btn tiny" id="q-spam" data-i18n="qSpamStart">Start Auto Spam</button>
+              <button class="btn tiny" id="q-join" data-i18n="qJoin">Run Join Messages</button>
+              <button class="btn tiny screen-launch" data-goto="screen"><span data-i18n="screenOpen">Screen</span><b class="screen-alert hidden" id="screen-alert">!</b></button>
+              <button class="icon-btn plus" id="dash-add" data-i18n-title="dashAdd" title="Add setting">+</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ---------- LIVE SERVER SCREEN ---------- -->
+    <section class="page" id="page-screen">
+      <h1 class="page-title"><button class="page-back" data-history-back aria-label="Back" title="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><span data-i18n="screenTitle">Screen</span><span class="badge screen-auto"><i class="dot on"></i><span data-i18n="screenAuto">AUTO LIVE</span></span></h1>
+      <div class="screen-page-grid">
+        <div class="card compact screen-card">
+          <div class="card-head"><span data-i18n="macChest">SCREEN (9 x 6)</span><span class="head-note" id="live-screen-account">-</span></div>
+          <div class="mcchest live-screen">
+            <div class="mcchest-grid" id="live-grid"></div>
+          </div>
+          <div class="screen-state" id="live-screen-state" data-i18n="screenWaiting">Waiting for an open server screen…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- CONNECT ---------- -->
+    <section class="page" id="page-connect">
+      <h1 class="page-title" data-i18n="connect">Connect</h1>
+      <div class="conn-grid">
+
+        <div class="card compact">
+          <div class="card-head" data-i18n="information">INFORMATION</div>
+          <label class="field"><span data-i18n="serverIp">Server IP</span><input id="c-host" placeholder="play.example.com" /></label>
+          <div class="row gap">
+            <label class="field grow"><span data-i18n="serverPort">Server Port</span><input id="c-port" type="number" value="25565" /></label>
+            <label class="field" style="width:150px"><span data-i18n="loginDelay">Login Delay (sec)</span><input id="c-delay" type="number" min="0" value="3" /></label>
+          </div>
+          <label class="field"><span data-i18n="mcVersion">Minecraft Version</span>
+            <select id="c-version"><option value="auto" data-i18n="autoDetect">Auto detect</option></select>
+          </label>
+          <label class="field"><span data-i18n="respack">Resource pack</span>
+            <select id="c-respack">
+              <option value="smart" data-i18n="respackSmart">Smart</option>
+              <option value="auto" data-i18n="respackAuto">Accept</option>
+              <option value="decline" data-i18n="respackDecline">Decline</option>
+              <option value="ignore" data-i18n="respackIgnore">Ignore</option>
+            </select>
+          </label>
+          <label class="field hidden" id="c-fakehost-wrap"><span data-i18n="fakeHost">Fake host</span><input id="c-fakehost" placeholder="hub.example.com" /></label>
+          <div class="row gap mt">
+            <button class="btn primary grow" id="c-connect" data-i18n="btnConnectCaps">CONNECT</button>
+            <button class="btn ghost grow" id="c-disconnect" data-i18n="btnDisconnectCaps">DISCONNECT</button>
+          </div>
+        </div>
+
+        <div class="card compact">
+          <div class="card-head"><span data-i18n="accountsCaps">ACCOUNTS</span> <button class="btn tiny" data-goto="accounts" data-i18n="manage">+ Manage</button></div>
+          <div class="list scroll8" id="connect-accounts"></div>
+        </div>
+
+        <div class="conn-settings">
+          <div class="drop-line" id="cs-line">
+            <button class="drop-gear open" id="cs-gear" aria-expanded="true" data-i18n-title="settingsCaps" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+          </div>
+          <div class="drop-panel open" id="cs-panel">
+            <div class="card compact">
+              <div class="card-head" data-i18n="settingsCaps">SETTINGS</div>
+              <div class="check-list scrollable" id="toggle-list">
+                <label class="check"><input type="checkbox" data-toggle="offline" data-feat="offline" /><span data-i18n="tOffline">Offline / Cracked accounts</span></label>
+                <label class="check"><input type="checkbox" data-toggle="sneak" data-feat="sneak" /><span data-i18n="tSneak">Sneak</span></label>
+                <label class="check"><input type="checkbox" data-toggle="physics" data-feat="physics" /><span data-i18n="tPhysics">Bot Physics</span></label>
+                <label class="check"><input type="checkbox" data-toggle="antiAfk" data-feat="antiAfk" /><span data-i18n="antiAfk">Anti AFK</span><button class="gear" data-goto="antiafk" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
+                <label class="check"><input type="checkbox" data-toggle="autoReconnect" data-feat="autoReconnect" /><span data-i18n="tAutoReconnect">Auto Reconnect</span><button class="gear" data-goto="reconnect" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
+                <label class="check"><input type="checkbox" data-toggle="joinMessages" data-feat="joinMessages" /><span data-i18n="tJoin">Join Messages</span><button class="gear" data-goto="join" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
+                <label class="check"><input type="checkbox" data-toggle="worldChangeMessages" data-feat="worldChangeMessages" /><span data-i18n="tWorldChange">World Change Messages</span></label>
+                <label class="check"><input type="checkbox" data-toggle="proxy" data-feat="proxy" /><span data-i18n="tProxy">Proxy</span><button class="gear" data-goto="proxies" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
+                <label class="check"><input type="checkbox" data-toggle="fakeHost" data-feat="fakeHost" /><span data-i18n="fakeHost">Fake Host</span></label>
+                <label class="check"><input type="checkbox" data-toggle="noChatSign" data-feat="noChatSign" /><span data-i18n="tNoChatSign">Disable chat signing</span></label>
+                <label class="check"><input type="checkbox" data-toggle="vanillaLike" data-feat="vanillaLike" /><span data-i18n="tVanilla">Behave like a vanilla client</span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ---------- CHAT ---------- -->
+    <section class="page" id="page-chat">
+      <h1 class="page-title" data-i18n="chat">Chat</h1>
+      <div class="card fill">
+        <div class="card-head">
+          <span data-i18n="liveChat">LIVE CHAT</span>
+          <div class="row gap">
+            <button class="btn tiny" id="chat-clear" data-i18n="clearChat">Clear chat</button>
+          </div>
+        </div>
+        <div class="slot-tabs" id="chat-slots"></div>
+        <div class="console" id="chat-box"></div>
+        <div class="row gap send-row">
+          <input id="chat-input" data-i18n-ph="chatPh" placeholder="Mesaj yaz ve Enter'a bas..." />
+          <button class="btn primary" id="chat-send" data-i18n="send">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- AUTO SPAM ---------- -->
+    <section class="page" id="page-spam">
+      <h1 class="page-title"><span data-i18n="autoSpamTitle">Auto Spam</span> <span class="badge hidden" id="spam-badge"><i class="dot on"></i><span data-i18n="spamActive">AUTO SPAM ACTIVE</span></span></h1>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><span data-i18n="messagesCaps">MESSAGES</span> <button class="btn tiny" id="spam-add" data-i18n="addMessage">+ Add message</button></div>
+          <label class="field"><span data-i18n="spamWhichAcc">Which account's messages?</span>
+            <select id="spam-profile"></select>
+          </label>
+          <label class="check tiny-check hidden" id="spam-own-wrap"><input type="checkbox" id="spam-own" /><span data-i18n="spamOwnList">Give this account its own message list</span></label>
+          <div class="hint hidden" id="spam-own-note" data-i18n="spamSharedNote">This account uses the shared list. Tick the box above to give it its own messages.</div>
+          <div class="list" id="spam-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head" data-i18n="settingsCaps">SETTINGS</div>
+          <div class="check-list">
+            <label class="check"><input type="checkbox" id="spam-autostart" data-feat="autoSpam" /><span data-i18n="spamAutostart">Start automatically when connected</span></label>
+            <label class="check"><input type="checkbox" id="spam-random" /><span data-i18n="randomOrder">Random message order</span></label>
+          </div>
+          <label class="field mt"><span data-i18n="mode">Mode</span>
+            <select id="spam-mode"><option value="fixed" data-i18n="modeFixed">Fixed interval</option><option value="range" data-i18n="modeRange">Random range</option></select>
+          </label>
+          <label class="field inline" id="spam-fixed-wrap"><span data-i18n="interval">Interval (sec)</span><input id="spam-interval" type="number" min="1" value="5" /></label>
+          <div class="row gap" id="spam-range-wrap">
+            <label class="field inline grow"><span data-i18n="minSec">Min (sec)</span><input id="spam-min" type="number" min="1" value="10" /></label>
+            <label class="field inline grow"><span data-i18n="maxSec">Max (sec)</span><input id="spam-max" type="number" min="1" value="20" /></label>
+          </div>
+          <div class="row gap mt">
+            <button class="btn primary grow" id="spam-start" data-i18n="start">START</button>
+            <button class="btn ghost grow" id="spam-stop" data-i18n="stop">STOP</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- ACCOUNTS ---------- -->
+    <section class="page" id="page-accounts">
+      <h1 class="page-title" data-i18n="accounts">Accounts</h1>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head" data-i18n="addEditAccount">ADD / EDIT ACCOUNT</div>
+          <input type="hidden" id="a-id" />
+          <label class="field"><span data-i18n="accountType">Account type</span>
+            <select id="a-type"><option value="offline">Offline / Cracked</option></select>
+          </label>
+          <label class="field"><span data-i18n="username">Username</span><input id="a-username" placeholder="KarabarakorsaBot" /></label>
+          <label class="field" id="a-pass-wrap"><span data-i18n="passwordOpt">Password (optional)</span><input id="a-password" type="password" placeholder="••••••••" /></label>
+          <div class="row gap mt">
+            <button class="btn primary grow" id="a-save" data-i18n="saveAccount">SAVE ACCOUNT</button>
+            <button class="btn ghost" id="a-reset" data-i18n="clear">Clear</button>
+          </div>
+          <div class="ms-block">
+            <button class="btn ms grow" id="a-mslogin"><svg class="ms-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="9.4" height="9.4" fill="#f25022"/><rect x="12.6" y="2" width="9.4" height="9.4" fill="#7fba00"/><rect x="2" y="12.6" width="9.4" height="9.4" fill="#00a4ef"/><rect x="12.6" y="12.6" width="9.4" height="9.4" fill="#ffb900"/></svg><span data-i18n="msLoginBtn">SIGN IN WITH MICROSOFT</span></button>
+            <p class="hint fixed-note" id="a-msstatus" data-i18n="accHint">The Microsoft sign-in page opens in a pop-up; your password is never stored.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head" data-i18n="savedAccounts">SAVED ACCOUNTS</div>
+          <div class="list" id="accounts-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- JOIN MESSAGES ---------- -->
+    <section class="page" id="page-join">
+      <h1 class="page-title" data-i18n="joinMessages">Join Messages</h1>
+      <div class="card">
+        <div class="card-head"><span data-i18n="commandsCaps">COMMANDS</span> <button class="btn tiny" id="join-add" data-i18n="addCommand">+ Add command</button></div>
+        <div class="list" id="join-list"></div>
+        <label class="check"><input type="checkbox" id="join-enabled" data-feat="joinMessages" /><span data-i18n="joinEnabled">Use join messages</span></label>
+        <label class="check"><input type="checkbox" id="join-reconnect" /><span data-i18n="joinReconnect">Run commands again after reconnect</span></label>
+        <div class="row gap mt"><button class="btn" id="join-run" data-i18n="runNow">RUN NOW</button></div>
+      </div>
+
+      <div class="card mt">
+        <div class="card-head" data-i18n="dialogCard">SERVER SCREENS (DIALOG)</div>
+        <p class="hint" data-i18n="dialogHint">Some servers open an on-screen form instead of chat commands.</p>
+        <label class="check"><input type="checkbox" id="dg-show" /><span data-i18n="dgShow">Show server screens in the app</span></label>
+        <label class="check"><input type="checkbox" id="dg-auto" /><span data-i18n="dgAuto">Auto-fill and submit with the saved password</span></label>
+        <div class="row gap wrap mt bottom">
+          <label class="field grow"><span><span data-i18n="savedPassword">Saved password</span> <i class="tag-mini" id="dg-passinfo"></i></span>
+            <input id="dg-pass" type="password" placeholder="********" autocomplete="off" /></label>
+          <label class="field" style="width:118px"><span data-i18n="delaySec">Delay (sec)</span><input id="dg-delay" type="number" min="0" value="2" /></label>
+          <button class="btn primary" id="dg-save" data-i18n="save">SAVE</button>
+        </div>
+        <div class="adv-wrap">
+          <button class="adv-toggle" data-adv="dg-adv" aria-expanded="false" data-i18n-title="advMore" title="More options"><span>+</span></button>
+          <div class="adv" id="dg-adv">
+            <label class="check"><input type="checkbox" id="dg-cmdmode" /><span data-i18n="dgCmdMode">Always submit the form as a command</span></label>
+            <label class="field"><span data-i18n="cmdTemplate">Command template</span>
+              <input id="dg-cmdtpl" placeholder="/register $(password) $(password_repeat)" autocomplete="off" /></label>
+            <p class="hint" data-i18n="dgCmdHint">The $(field_name) placeholder is replaced with the form field.</p>
+            <button class="btn tiny" id="dg-clear" data-i18n="clearSavedPassword">DELETE SAVED PASSWORD</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- ANTI AFK ---------- -->
+    <section class="page" id="page-antiafk">
+      <h1 class="page-title"><button class="page-back" data-history-back aria-label="Back" title="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><span data-i18n="antiAfk">Anti AFK</span></h1>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head" data-i18n="movement">MOVEMENT</div>
+          <label class="check"><input type="checkbox" id="afk-enabled" data-feat="antiAfk" /><span data-i18n="antiAfk">Anti AFK</span></label>
+          <div class="check-list mt">
+            <label class="check"><input type="checkbox" id="afk-random" /><span data-i18n="afkRandom">Random movement</span></label>
+            <label class="check"><input type="checkbox" id="afk-walk" /><span data-i18n="afkWalk">Walk</span></label>
+            <label class="check"><input type="checkbox" id="afk-jump" /><span data-i18n="afkJump">Jump</span></label>
+            <label class="check"><input type="checkbox" id="afk-sneak" /><span data-i18n="afkSneak">Sneak</span></label>
+            <label class="check"><input type="checkbox" id="afk-rotate" /><span data-i18n="afkRotate">Rotate</span></label>
+            <label class="check"><input type="checkbox" id="afk-look" /><span data-i18n="afkLook">Look around</span></label>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head" data-i18n="intervalCaps">INTERVAL</div>
+          <div class="row gap">
+            <label class="field inline grow"><span data-i18n="minSec">Min (sec)</span><input id="afk-min" type="number" min="1" value="30" /></label>
+            <label class="field inline grow"><span data-i18n="maxSec">Max (sec)</span><input id="afk-max" type="number" min="1" value="60" /></label>
+          </div>
+          <p class="hint" data-i18n="afkHint">Example: one random movement every 30-60 seconds.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- AUTO RECONNECT ---------- -->
+    <section class="page" id="page-reconnect">
+      <h1 class="page-title"><button class="page-back" data-history-back aria-label="Back" title="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><span data-i18n="tAutoReconnect">Auto Reconnect</span></h1>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head" data-i18n="settingsCaps">SETTINGS</div>
+          <label class="check"><input type="checkbox" id="rc-enabled" data-feat="autoReconnect" /><span data-i18n="tAutoReconnect">Auto Reconnect</span></label>
+          <label class="field inline mt"><span data-i18n="reconnectDelay">Reconnect delay (sec)</span><input id="r-delay" type="number" min="1" value="10" /></label>
+          <label class="check"><input type="checkbox" id="r-unlimited" /><span data-i18n="unlimitedAttempts">Unlimited attempts</span></label>
+          <label class="field inline" id="r-max-wrap"><span data-i18n="maxAttempts">Max attempts</span><input id="r-max" type="number" min="1" value="5" /></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- MACROS ---------- -->
+    <section class="page" id="page-macros">
+      <h1 class="page-title"><span data-i18n="macros">Macros</span> <span class="badge hidden" id="mac-badge"><i class="dot on"></i><span data-i18n="macRunning">RUNNING</span></span></h1>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head" data-i18n="macrosCaps">MACROS</div>
+          <label class="check"><input type="checkbox" id="mac-farmer-en" data-feat="macroFarmer" /><span data-i18n="macFarmer">Auto Farm</span><button class="gear" data-goto="macrofarmer" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
+          <p class="hint" data-i18n="macFarmerSub">Types a command, then clicks the slots you picked on the screen that opens - in order and on repeat.</p>
+        </div>
+        <div class="card">
+          <div class="card-head" data-i18n="reconnectInfoHead">HOW IT WORKS</div>
+          <p class="hint" data-i18n="macInfo">Open the settings with the gear, write the command (for example /farmer), then click the slots on the chest screen in the order they have to be clicked. Every step has its own waiting time. If a step opens another screen, the next step clicks on that new screen.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- AUTO FARM (macro settings) ---------- -->
+    <section class="page" id="page-macrofarmer">
+      <h1 class="page-title"><span data-i18n="macFarmer">Auto Farm</span> <span class="badge hidden" id="mf-badge"><i class="dot on"></i><span data-i18n="macRunning">RUNNING</span></span></h1>
+      <div class="macro-grid">
+        <div class="mcol">
+
+          <div class="card compact">
+            <div class="card-head" data-i18n="macCommandCaps">COMMAND</div>
+            <label class="field"><span data-i18n="macCommand">Command that opens the screen</span><input id="mf-command" type="text" placeholder="/farmer" spellcheck="false" /></label>
+            <label class="check"><input type="checkbox" id="mf-enabled" data-feat="macroFarmer" /><span data-i18n="macAuto">While Auto Farm is ON, run it automatically (also after a reconnect or a server restart)</span></label>
+            <label class="field"><span data-i18n="macStartOrder">When should it start?</span>
+              <select id="mf-order"></select>
+            </label>
+            <label class="field inline"><span data-i18n="macStartDelay">Wait before this step (sec)</span><input id="mf-sdelay" type="number" min="0" step="1" value="3" /></label>
+            <div class="joinplan" id="mf-plan"></div>
+            <div class="row gap mt"><button class="btn tiny ghost" data-goto="join" data-i18n="macOpenJoin">Edit join commands</button></div>
+          </div>
+
+          <div class="card compact">
+            <div class="card-head"><span data-i18n="macChest">SCREEN (9 x 6)</span><span class="head-note auto-read-note" data-i18n="screenAuto">AUTO LIVE</span></div>
+            <p class="chesttip" data-i18n="macPick">pick the slots to click - the number in the corner is the slot number</p>
+            <div class="mcchest">
+              <div class="mcchest-title" id="mf-chest-title">Farmer</div>
+              <div class="mcchest-grid" id="mf-grid"></div>
+            </div>
+          </div>
+
+          <p class="hint" id="mf-empty" data-i18n="macEmpty">Click a slot above: it lights up and drops into the step list below.</p>
+
+          <div class="drop-panel" id="mf-panel">
+            <div class="card compact">
+              <div class="card-head"><span data-i18n="macStepsCaps">ORDER (STEPS)</span> <button class="btn tiny" id="mf-clear" data-i18n="macClear">Clear</button></div>
+              <p class="chesttip" data-i18n="macClickHint">Use the LEFT button on a step to change the click type: some servers need a RIGHT click or SHIFT+click to sell.</p>
+              <div class="list" id="mf-steps"></div>
+              <label class="field inline mt"><span data-i18n="macCycle">Wait between cycles (sec)</span><input id="mf-cycle" type="number" min="3" value="60" /></label>
+              <label class="check"><input type="checkbox" id="mf-close" /><span data-i18n="macCloseAfter">Close the screen when a cycle ends</span></label>
+              <label class="check"><input type="checkbox" id="mf-raw" /><span data-i18n="macRaw">Send the click as a raw packet (try this if the server ignores the clicks)</span></label>
+              <div class="row gap mt">
+                <button class="btn primary grow" id="mf-run" data-i18n="macRun">RUN</button>
+                <button class="btn ghost grow" id="mf-stop" data-i18n="macStop">STOP</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <div class="mcol">
+          <div class="card compact">
+            <div class="card-head" data-i18n="statusCaps">STATUS</div>
+            <div class="mfstate"><i class="dot" id="mf-dot"></i><b id="mf-state" data-i18n="macStopped">OFF</b></div>
+            <div class="mfrow"><span data-i18n="macStepNow">Step</span><b id="mf-step-now">-</b></div>
+            <div class="mfrow"><span data-i18n="macCycles">Cycles</span><b id="mf-cycles">0</b></div>
+            <div class="mfrow"><span data-i18n="macClicks">Clicks sent</span><b id="mf-clicks">0</b></div>
+          </div>
+          <div class="card compact">
+            <div class="card-head" data-i18n="reconnectInfoHead">HOW IT WORKS</div>
+            <p class="hint" data-i18n="macInfo2">Every step clicks on the screen that is open at that moment. So if the first step opens a new screen (for example the cactus menu), the second step clicks inside that new screen.</p>
+            <p class="hint mt" data-i18n="macGuard">It keeps running while the switch is ON: even if the server restarts, the bot is kicked or reconnects, the macro starts itself again. It only stops when you turn this switch off or press STOP.</p>
+            <p class="hint mt" data-i18n="macInfo3">If the server ignores the clicks: set the step to RIGHT or SHIFT+LEFT, increase the waiting times a little, and if it still does not work turn on "Send the click as a raw packet". Every click is written line by line on the LOGS page.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- PROXIES ---------- -->
+    <section class="page" id="page-proxies">
+      <h1 class="page-title" data-i18n="proxies">Proxies</h1>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head" data-i18n="addProxy">ADD PROXY</div>
+          <label class="field"><span data-i18n="type">Type</span>
+            <select id="p-type"><option value="socks5">SOCKS5</option><option value="socks4">SOCKS4</option><option value="http">HTTP</option></select>
+          </label>
+          <label class="field"><span data-i18n="host">Host</span><input id="p-host" placeholder="127.0.0.1" /></label>
+          <label class="field"><span data-i18n="port">Port</span><input id="p-port" type="number" placeholder="1080" /></label>
+          <label class="field"><span data-i18n="username">Username</span><input id="p-user" /></label>
+          <label class="field"><span data-i18n="password">Password</span><input id="p-pass" type="password" /></label>
+          <div class="row gap mt"><button class="btn primary grow" id="p-add" data-i18n="addProxy">ADD PROXY</button></div>
+        </div>
+        <div class="card">
+          <div class="card-head" data-i18n="proxyList">PROXY LIST</div>
+          <div class="list" id="proxy-list"></div>
+        </div>
+        <div class="card vpn-card">
+          <div class="card-head"><span data-i18n="vpnTitle">VPN</span><span class="head-note" id="tor-status">OFF</span></div>
+          <p class="hint" data-i18n="vpnHint">Minecraft bağlantısını güvenli VPN ağı üzerinden yönlendir.</p>
+          <div class="vpn-buttons">
+            <button class="vpn-main-btn" id="tor-start"><span data-i18n="vpnLabel">VPN</span>: <b id="vpn-state">OFF</b></button>
+            <button class="vpn-icon-btn" id="vpn-settings" title="VPN settings">⚙</button>
+            <button class="vpn-main-btn" id="tor-new" disabled><span data-i18n="vpnChangeIp">CHANGE IP</span></button>
+            <button class="vpn-icon-btn globe" id="vpn-country" title="VPN country">🌐</button>
+          </div>
+          <div class="vpn-country-caption"><span data-i18n="vpnCountry">Country</span>: <b id="vpn-country-name">Automatic</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- LOGS ---------- -->
+    <section class="page" id="page-logs">
+      <h1 class="page-title" data-i18n="logs">Logs</h1>
+      <div class="card fill">
+        <div class="card-head">
+          <div class="row gap wrap" id="log-filters">
+            <label class="check tiny-check"><input type="checkbox" data-lvl="INFO" checked /><span>INFO</span></label>
+            <label class="check tiny-check"><input type="checkbox" data-lvl="WARNING" checked /><span>WARNING</span></label>
+            <label class="check tiny-check"><input type="checkbox" data-lvl="ERROR" checked /><span>ERROR</span></label>
+            <label class="check tiny-check"><input type="checkbox" data-lvl="CHAT" checked /><span>CHAT</span></label>
+            <label class="check tiny-check"><input type="checkbox" data-lvl="CONNECT" checked /><span>CONNECT</span></label>
+            <label class="check tiny-check"><input type="checkbox" data-lvl="DISCONNECT" checked /><span>DISCONNECT</span></label>
+            <label class="check tiny-check"><input type="checkbox" data-lvl="RECONNECT" checked /><span>RECONNECT</span></label>
+          </div>
+          <div class="row gap">
+            <button class="btn tiny" id="log-clear" data-i18n="clearLogs">Clear logs</button>
+            <button class="btn tiny" id="log-export" data-i18n="exportLogs">Export logs</button>
+          </div>
+        </div>
+        <div class="slot-tabs" id="log-slots"></div>
+        <div class="console" id="log-box"></div>
+      </div>
+    </section>
+
+    <!-- ---------- SETTINGS ---------- -->
+    <section class="page" id="page-settings">
+      <h1 class="page-title" data-i18n="settings">Settings</h1>
+      <div class="grid three">
+        <div class="card">
+          <div class="card-head" data-i18n="appearance">APPEARANCE</div>
+          <label class="field"><span data-i18n="theme">Theme</span>
+            <select id="s-theme"><option value="dark" data-i18n="themeDark">Dark theme</option><option value="light" data-i18n="themeLight">Light theme</option></select>
+          </label>
+          <label class="field"><span data-i18n="language">Language</span>
+            <select id="s-lang"><option value="tr">Türkçe</option><option value="en">English</option></select>
+          </label>
+        </div>
+        <div class="card">
+          <div class="card-head" data-i18n="general">GENERAL</div>
+          <div class="stack0">
+          <label class="check"><input type="checkbox" id="s-startup" /><span data-i18n="startWithWindows">Open at startup</span></label>
+          </div>
+          <label class="check"><input type="checkbox" id="s-notify" /><span data-i18n="notifications">Notifications</span></label>
+        </div>
+        <div class="card">
+          <div class="card-head" data-i18n="performance">PERFORMANCE</div>
+          <label class="check"><input type="checkbox" id="s-lowcpu" /><span data-i18n="lowCpu">Low CPU mode</span></label>
+          <label class="check"><input type="checkbox" id="s-mem" /><span data-i18n="memOpt">Memory optimization</span></label>
+          <label class="check"><input type="checkbox" id="s-packetlog" /><span data-i18n="packetLog">Packet log (debug)</span></label>
+          <div class="row gap wrap mt">
+            <button class="btn tiny" id="s-openfolder" data-i18n="openFolder">Open config folder</button>
+            <button class="btn tiny" id="s-openlog" data-i18n="openLog">Open error log</button>
+            <button class="btn tiny" id="s-reset" data-i18n="resetSettings">Reset settings</button>
+          </div>
+          <div class="info-wrap">
+            <button class="info-toggle" id="s-info-toggle" aria-expanded="false" data-i18n-title="aboutApp" title="About"><span>i</span></button>
+            <div class="drop-panel" id="s-info-panel"><p class="hint mono" id="s-appinfo"></p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Sunucu ekrani (dialog) -->
+<div class="modal hidden" id="dlg-modal">
+  <div class="modal-card form">
+    <div class="dlg-head">
+      <img class="dlg-logo" src="assets/logo.png" alt="" />
+      <div>
+        <div class="modal-title" id="dlg-title" data-i18n="dlgTitle">SERVER SCREEN</div>
+        <div class="dlg-sub" id="dlg-sub" data-i18n="dlgSub">Form sent by the server</div>
+      </div>
+    </div>
+    <div class="dlg-body" id="dlg-body"></div>
+    <div class="dlg-auto hidden" id="dlg-auto-bar">
+      <span id="dlg-auto-text" data-i18n="dlgAutoText">Submitting automatically...</span>
+      <button class="btn tiny" id="dlg-auto-cancel" data-i18n="dlgStopAuto">STOP, I WILL TYPE</button>
+    </div>
+    <div class="dlg-fields" id="dlg-fields"></div>
+    <div class="row gap wrap" id="dlg-buttons"></div>
+    <div class="adv-wrap">
+      <button class="adv-toggle" data-adv="dlg-adv" aria-expanded="false" data-i18n-title="advMore" title="More options"><span>+</span></button>
+      <div class="adv" id="dlg-adv">
+        <div class="dlg-alt">
+          <label class="field"><span data-i18n="dlgAltLabel">If the server rejects the form: send as a command</span>
+            <input id="dlg-cmd" placeholder="/register $(password) $(password_repeat)" autocomplete="off" /></label>
+          <button class="btn ghost" id="dlg-sendcmd" data-i18n="dlgSendCmd">SEND AS COMMAND</button>
+        </div>
+      </div>
+    </div>
+    <p class="hint" id="dlg-status"></p>
+    <button class="btn ghost" id="dlg-close" data-i18n="close">CLOSE</button>
+  </div>
+</div>
+
+<!-- Bir ayar hangi hesaplarda acik olsun? -->
+<div class="modal hidden" id="acc-modal">
+  <div class="modal-card wide">
+    <div class="modal-title" id="am-title">SETTING</div>
+    <p class="hint" data-i18n="amSub">Pick the accounts this setting should be on for. It turns on by itself every time those accounts join the server.</p>
+    <div class="amlist" id="am-list"></div>
+    <div class="row gap wrap amtools">
+      <button class="btn tiny" id="am-all" data-i18n="amAll">Select all</button>
+      <button class="btn tiny" id="am-none" data-i18n="amNone">Clear</button>
+      <span class="amcount" id="am-count">0/0</span>
+    </div>
+    <div class="row gap">
+      <button class="btn primary grow" id="am-save" data-i18n="amSave">SAVE</button>
+      <button class="btn ghost grow" id="am-cancel" data-i18n="cancel">CANCEL</button>
+    </div>
+    <button class="btn ghost amoff" id="am-off" data-i18n="amOff">TURN THE SETTING OFF (no accounts)</button>
+  </div>
+</div>
+
+<!-- PANEL'e hangi ayarlar eklensin? -->
+<div class="modal hidden" id="feat-modal">
+  <div class="modal-card wide">
+    <div class="modal-title" data-i18n="dashAddTitle">PIN SETTINGS TO THE DASHBOARD</div>
+    <p class="hint" data-i18n="dashAddSub">Pick the settings from CONNECT and MACROS you want on the dashboard.</p>
+    <div class="amlist" id="fp-list"></div>
+    <div class="row gap">
+      <button class="btn primary grow" id="fp-save" data-i18n="amSave">SAVE</button>
+      <button class="btn ghost grow" id="fp-cancel" data-i18n="cancel">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- VPN settings -->
+<div class="modal hidden" id="vpn-settings-modal">
+  <div class="modal-card vpn-dialog">
+    <div class="modal-title" data-i18n="vpnSettingsTitle">VPN SETTINGS</div>
+    <label class="check"><input type="checkbox" id="vpn-prevent" /><span data-i18n="vpnPrevent">Prevent non-VPN connections</span></label>
+    <label class="check"><input type="checkbox" id="vpn-stream" /><span data-i18n="vpnStream">Change IP on every server join</span></label>
+    <label class="check"><input type="checkbox" id="vpn-dns" /><span data-i18n="vpnResolve">Resolve DNS using VPN</span></label>
+    <div class="row gap"><button class="btn primary grow" id="vpn-settings-save" data-i18n="vpnDone">DONE</button></div>
+  </div>
+</div>
+<!-- VPN country picker -->
+<div class="modal hidden" id="vpn-country-modal">
+  <div class="modal-card vpn-dialog country-dialog">
+    <div class="modal-title" data-i18n="vpnRegions">VPN REGIONS</div>
+    <div class="vpn-selected-caption" data-i18n="vpnNoneSelected">None selected → VPN decides</div>
+    <div class="vpn-country-list" id="vpn-country-list"></div>
+    <label class="check"><input type="checkbox" id="vpn-strict" /><span data-i18n="vpnEnforce">Enforce for all nodes</span></label>
+    <div class="row gap"><button class="btn ghost grow" id="vpn-country-reset" data-i18n="vpnReset">RESET</button><button class="btn primary grow" id="vpn-country-done" data-i18n="vpnDone">DONE</button></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="assets/item-icons.js"></script>
+<script src="core.js"></script>
+<script src="i18n.js"></script>
+<script src="renderer.js"></script>
+</body>
+</html>
