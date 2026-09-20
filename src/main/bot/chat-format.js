@@ -189,7 +189,10 @@ function walk(node, inherit, out, lang, depth) {
 
 // ChatMessage / JSON bileseni -> parca listesi
 function spansOf(msg, lang) {
-  const json = msg && typeof msg === 'object' && msg.json ? msg.json : msg;
+  let json = msg && typeof msg === 'object' && msg.json ? msg.json : msg;
+  if (typeof json === 'string') {
+    try { json = JSON.parse(json); } catch (_) {}
+  }
   const out = [];
   try {
     walk(json, { c: '', b: false, i: false, u: false, s: false, o: false }, out, lang || null, 0);

@@ -100,10 +100,6 @@ const save = (patch) => bridge.config.patch(patch).then((data) => { cfg = data; 
 async function boot() {
   if (!bridge) return;
   cfg = await bridge.config.get();
-  const initialLogAuto = $('log-autoscroll'); if (initialLogAuto) initialLogAuto.checked = cfg.settings.autoScrollLogs !== false;
-  const initialDashAuto = $('dash-autoscroll'); if (initialDashAuto) initialDashAuto.checked = cfg.settings.autoScrollLogs !== false;
-  const initialChatAuto = $('chat-autoscroll'); if (initialChatAuto) initialChatAuto.checked = cfg.settings.autoScrollLogs !== false;
-  const initialPanelAuto = $('panel-autoscroll'); if (initialPanelAuto) initialPanelAuto.checked = cfg.settings.autoScrollLogs !== false;
   window.__lang = cfg.settings.language;
   document.body.dataset.theme = cfg.settings.theme;
 
@@ -409,8 +405,8 @@ function renderAccounts() {
   bindAccountSorting($('accounts-list'));
   bindAccountSorting($('connect-accounts'));
   accountsSig = accountSignature();
-  renderStartupList();
-  try { applyFeatureUI(); if (featPick) renderFeatPicker(); } catch (_) {}
+  paintStartupRow();
+  try { applyFeatureUI(); if (featPick || spamAct) renderFeatPicker(); } catch (_) {}
   try { window.enhanceScrollFade(); } catch (_) {}
 
   document.querySelectorAll('#accounts-list [data-act], #connect-accounts [data-act]').forEach((b) => {
@@ -458,27 +454,8 @@ function renderAccounts() {
   });
 }
 
-// Ayarlar > "Baslangicta acilsin" icin hesap secici
-function renderStartupList() {
-  const box = $('s-startup-list');
-  if (!box || !cfg) return;
-  const chosen = (cfg.settings.startupAccounts || []);
-  const list = cfg.accounts.list;
-  box.innerHTML = list.length
-    ? list.map((a) => accRowHtml(a, { pickOnly: true, picked: chosen.includes(a.id) })).join('')
-    : `<div class="empty">${window.t('noAccounts')}</div>`;
-  box.querySelectorAll('[data-pick]').forEach((row) => {
-    row.onclick = () => {
-      const id = row.dataset.pick;
-      const cur = (cfg.settings.startupAccounts || []).slice();
-      const i = cur.indexOf(id);
-      if (i >= 0) cur.splice(i, 1); else cur.push(id);
-      cfg.settings.startupAccounts = cur;
-      save({ settings: { startupAccounts: cur } });
-      renderStartupList();
-    };
-  });
-}
+// "Baslangicta acilsin" artik uygulama ici hesap seciciyle yapilir:
+// checkbox'a basinca secim penceresi acilir (renderStartupList kaldirildi).
 
 async function saveAccount() {
   const payload = {
@@ -660,14 +637,17 @@ function spanHtml(spans) {
     return `<span class="${cls.join(' ')}"${col}>${esc(s.t)}</span>`;
   }).join('');
 }
-const pendingChatScrolls = new WeakSet();
-function scrollChatToBottom(box, enabled) {
-  if (!box || !enabled || pendingChatScrolls.has(box)) return;
-  pendingChatScrolls.add(box);
-  const run = () => {
-    pendingChatScrolls.delete(box);
-    if (box.isConnected) box.scrollTop = box.scrollHeight;
-  };
+// Akilli kaydirma: kullanici en alttayken yeni icerik gelince otomatik en
+// alta iner. Kullanici yukari kaydirdiysa ekran yerinde kalir - yeni mesajlar
+// onu zorla asagi indirmez. En alta geri donunce takilma kendiliginden devam
+// eder. (Sohbet, kayit ve paneldeki canli sohbet bu kuralla calisir.)
+function atChatBottom(box) {
+  if (!box) return true;
+  return box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+}
+function snapChatToBottom(box) {
+  if (!box || !box.isConnected) return;
+  const run = () => { if (box.isConnected) box.scrollTop = box.scrollHeight; };
   if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(run);
   else window.setTimeout(run, 0);
 }
@@ -687,32 +667,96 @@ function addChatLine(entry, skipFilter) {
   const limit = cfg && cfg.settings.memoryOptimization ? 250 : 600;
   const put = (box, cap) => {
     if (!box) return;
+    const stick = atChatBottom(box);
     const div = document.createElement('div');
     div.className = 'line ' + cls;
     div.innerHTML = html;
     box.appendChild(div);
     while (box.childElementCount > cap) box.removeChild(box.firstChild);
-    if (box === document.getElementById('dash-chat')) {
-      scrollChatToBottom(box, cfg && cfg.settings && cfg.settings.autoScrollLogs !== false);
-    } else {
-      scrollChatToBottom(box, true);
-    }
+    if (stick) snapChatToBottom(box);
   };
+  const stickChat = atChatBottom(chatBox);
   const div = document.createElement('div');
   div.className = 'line ' + cls;
   div.innerHTML = html;
   chatBox.appendChild(div);
   while (chatBox.childElementCount > limit) chatBox.removeChild(chatBox.firstChild);
-  scrollChatToBottom(chatBox, $('chat-autoscroll') ? $('chat-autoscroll').checked : true);
+  if (stickChat) snapChatToBottom(chatBox);
   const dash = document.getElementById('dash-chat');
   put(dash, 60);   // panelde sadece son satirlar
+}
+const chatInputState = new Map();
+function inputChatState(inputId) {
+  const key = `${effChatSlot()}:${inputId}`;
+  if (!chatInputState.has(key)) chatInputState.set(key, {
+    history: [], index: 0, draft: '', tab: null
+  });
+  return chatInputState.get(key);
+}
+function resetChatTab(inputId) { inputChatState(inputId).tab = null; }
+function rememberChatInput(inputId, text) {
+  const st = inputChatState(inputId);
+  if (text && st.history[st.history.length - 1] !== text) st.history.push(text);
+  if (st.history.length > 80) st.history.splice(0, st.history.length - 80);
+  st.index = st.history.length; st.draft = ''; st.tab = null;
+}
+function moveChatHistory(inputId, direction) {
+  const el = $(inputId); if (!el) return;
+  const st = inputChatState(inputId);
+  if (!st.history.length) return;
+  if (st.index === st.history.length) st.draft = el.value;
+  st.index = direction < 0 ? Math.max(0, st.index - 1) : Math.min(st.history.length, st.index + 1);
+  el.value = st.index === st.history.length ? st.draft : st.history[st.index];
+  el.setSelectionRange(el.value.length, el.value.length);
+  st.tab = null;
+}
+async function completeChatInput(inputId) {
+  const el = $(inputId); if (!el) return;
+  const pos = typeof el.selectionStart === 'number' ? el.selectionStart : el.value.length;
+  const before = el.value.slice(0, pos);
+  const m = before.match(/(?:^|\s)([^\s]*)$/);
+  if (!m || !m[1]) return;
+  const token = m[1];
+  const start = pos - token.length;
+  const prefix = before.slice(0, start);
+  const suffix = el.value.slice(pos);
+  const st = inputChatState(inputId);
+  const old = st.tab;
+  const same = old && old.value === el.value && old.cursor === pos
+    && old.prefix === prefix && old.suffix === suffix;
+  let matches = same ? old.matches : [];
+  if (!matches.length) {
+    try {
+      if (token.startsWith('/')) {
+        matches = await bridge.bot.tabComplete(before, effChatSlot());
+      } else {
+        let names = await bridge.bot.players(effChatSlot());
+        names = Array.isArray(names) ? names : [];
+        const at = token.startsWith('@') ? '@' : '';
+        const q = token.slice(at.length).toLowerCase();
+        matches = names.filter((name) => String(name).toLowerCase().startsWith(q))
+          .map((name) => at + name);
+      }
+    } catch (_) { matches = []; }
+    matches = [...new Set((Array.isArray(matches) ? matches : [])
+      .map((x) => String(x || '').trim()).filter(Boolean))];
+  }
+  if (!matches.length) return;
+  const index = same ? (old.index + 1) % matches.length : 0;
+  let replacement = matches[index];
+  if (token.startsWith('/') && !replacement.startsWith('/')) replacement = '/' + replacement;
+  const value = prefix + replacement + suffix;
+  st.tab = { matches, index, value, cursor: prefix.length + replacement.length, prefix, suffix };
+  el.value = value;
+  el.setSelectionRange(st.tab.cursor, st.tab.cursor);
 }
 async function sendChat(inputId) {
   const el = $(inputId || 'chat-input');
   const v = el.value.trim();
   if (!v) return;
   const res = await bridge.bot.chat(v, effChatSlot());
-  if (!res || !res.ok) window.toast(T('tChatFail'), 'error');
+  if (!res || !res.ok) { window.toast(T('tChatFail'), 'error'); return; }
+  rememberChatInput(inputId || 'chat-input', v);
   el.value = '';
 }
 
@@ -750,7 +794,6 @@ function fillSpam() {
   $('spam-interval').onchange = () => spamSave({ interval: Number($('spam-interval').value) });
   $('spam-min').onchange = () => spamSave({ minDelay: Number($('spam-min').value) });
   $('spam-max').onchange = () => spamSave({ maxDelay: Number($('spam-max').value) });
-  renderSpamPicked();
   applyFeatureUI();
 }
 
@@ -772,26 +815,14 @@ function renderSpamProfiles() {
   if (note) note.classList.toggle('hidden', !spamProfile || spamHasOwn(spamProfile));
 }
 
-// Otomatik mesajin acik oldugu hesaplar
-function renderSpamPicked() {
-  const box = $('spam-picked-names'); if (!box) return;
-  const ids = featEnabled('autoSpam') ? featList('autoSpam') : [];
-  const names = ids.map((id) => accNameOf(id)).filter(Boolean);
-  box.textContent = names.length ? names.join(', ') : T('spamNoAcc');
-  box.classList.toggle('muted', !names.length);
-}
-
-// START / STOP: secili hesaplarin hepsinde
-function spamTargets() { return featEnabled('autoSpam') ? featList('autoSpam') : []; }
+// START / STOP artik "Baglaninca otomatik baslat" (autoSpam feature) ile ilgili
+// DEGILDIR: her basista hangi hesaplarda islem yapilacagi ayri bir pencerede
+// sorulur, secim SADECE o anki islem icin kullanilir. featureAccounts /
+// featureEnabled (baglaninca otomatik baslat listesi) hicbir sekilde
+// degistirilmez - START'a basinca otomatik baslat'a hicbir sinyal gitmez.
 async function spamRunAll(start) {
-  const ids = spamTargets();
-  if (!ids.length) { window.toast(T('tSpamPickFirst'), 'warn'); openFeatPicker('autoSpam'); return; }
-  const live = (slotInfo.list || []).filter((x) => ids.indexOf(x.accountId) !== -1);
-  if (!live.length) { window.toast(T('tSpamNoLive'), 'warn'); return; }
-  const r = await bridge.bot.spamMany({ start, accountIds: ids });
-  const names = (r && r.list ? r.list : []).filter((x) => x.ok).map((x) => x.name || accNameOf(x.accountId)).filter(Boolean);
-  if (r && r.ok) window.toast((start ? T('tSpamStarted') : T('tSpamStopped')) + (names.length ? ': ' + names.join(', ') : ''), start ? 'ok' : 'info');
-  else window.toast(T(start ? 'tSpamStartFail' : 'tSpamStopFail'), 'error');
+  if (!cfg) return;
+  openSpamActPicker(start);
 }
 function updateSpamMode(persist) {
   const range = $('spam-mode').value === 'range';
@@ -861,12 +892,12 @@ const FEATURE_I18N = {
   autoReconnect: 'tAutoReconnect', joinMessages: 'tJoin',
   worldChangeMessages: 'tWorldChange', proxy: 'tProxy', fakeHost: 'fakeHost',
   noChatSign: 'tNoChatSign', vanillaLike: 'tVanilla', macroFarmer: 'macFarmer',
-  autoSpam: 'autoSpamTitle'
+  autoSpam: 'autoSpamTitle', startup: 'startWithWindows'
 };
 const FEATURE_PAGE = { macroFarmer: 'macrosCaps', autoSpam: 'navSpam' };
 
 function featLabel(key) { return T(FEATURE_I18N[key] || key); }
-const PANEL_KEYS = FEATURE_KEYS.concat(['autoScrollLogs']);
+const PANEL_KEYS = FEATURE_KEYS;
 function accIdList() {
   const l = (cfg && cfg.accounts && cfg.accounts.list) ? cfg.accounts.list : [];
   return l.map((a) => a.id);
@@ -934,12 +965,17 @@ function bindFeatureSwitches(root) {
     el.dataset.featBound = '1';
     el.addEventListener('click', (e) => {
       e.preventDefault();
+      // "Baglaninca otomatik baslat" da diger ayarlar gibi davranir:
+      // checkbox'a her iki yonde de (acarken ve kapatirken) hesap secme
+      // penceresi acilir. Kapatmak istedigin hesaplarin tikini kaldirirsin,
+      // KAYDET'e basinca listeden cikar; sagdaki sayi (n/toplam) azalir,
+      // hic hesap kalmazsa sayi kaybolur ve ayar kapanir.
       openFeatPicker(el.dataset.feat);
     });
     el.addEventListener('keydown', (e) => {
       if (e.key !== ' ' && e.key !== 'Enter') return;
       e.preventDefault();
-      openFeatPicker(el.dataset.feat);
+      el.click();
     });
   });
 }
@@ -966,14 +1002,16 @@ function afterFeatureChange(key) {
   try { refreshDashboard(); } catch (_) {}
   if (key === 'joinMessages') { try { renderMacroOrder(); renderMacroPlan(); } catch (_) {} }
   if (key === 'macroFarmer') { try { renderMacro(); } catch (_) {} }
-  if (key === 'autoSpam') { try { renderSpamProfiles(); renderSpamPicked(); } catch (_) {} }
+  if (key === 'autoSpam') { try { renderSpamProfiles(); } catch (_) {} }
 }
 
 /* --- hesap secme penceresi ------------------------------------------------ */
 let featPick = null;
+let spamAct = null;
 function openFeatPicker(key) {
   if (!cfg) return;
   vpnPick = null;
+  spamAct = null;
   $('am-off').classList.remove('hidden');
   featPick = { key, sel: featList(key) };
   const sub = document.querySelector('#acc-modal [data-i18n="amSub"]'); if (sub) sub.textContent = T('amSub');
@@ -985,15 +1023,52 @@ function closeFeatPicker() {
   featPick = null;
   const m = $('acc-modal'); if (m) m.classList.add('hidden');
 }
+// AYARLAR > "Baslangicta acilsin": disli kaldirildi. Diger ayarlar gibi
+// checkbox'a basinca (acarken ve kapatirken) hesap secme penceresi acilir.
+function openStartupPicker() {
+  if (!cfg) return;
+  vpnPick = null;
+  spamAct = null;
+  featPick = { key: 'startup', sel: (cfg.settings.startupAccounts || []).slice() };
+  $('am-off').classList.remove('hidden');
+  const t = $('am-title'); if (t) t.textContent = T('startWithWindows');
+  const sub = document.querySelector('#acc-modal [data-i18n="amSub"]');
+  if (sub) sub.textContent = T('startupSub');
+  renderFeatPicker();
+  const m = $('acc-modal'); if (m) m.classList.remove('hidden');
+}
+// Checkbox durumu + sayac (diger ayarlar gibi): n/toplam rozeti, MOR = bazi
+// hesaplar, SARI (varsayilan) = tum hesaplar, hesap yoksa rozet kaybolur.
+function paintStartupRow() {
+  const el = $('s-startup'); const lab = el ? el.closest('.check') : null;
+  if (!el || !lab || !cfg) return;
+  const ids = (cfg.settings.startupAccounts || []).filter((id) => accIdList().indexOf(id) !== -1);
+  const total = accIdList().length;
+  const n = ids.length;
+  const all = total > 0 && n >= total;
+  el.checked = n > 0;
+  el.classList.toggle('part', n > 0 && !all);
+  lab.classList.toggle('part', n > 0 && !all);
+  let b = lab.querySelector('.featn');
+  if (!b) {
+    b = document.createElement('i');
+    b.className = 'featn';
+    const anchor = lab.querySelector('.gear, .dtx');
+    if (anchor) lab.insertBefore(b, anchor); else lab.appendChild(b);
+  }
+  b.textContent = n ? n + '/' + total : '';
+  b.classList.toggle('hidden', !n);
+}
 function renderFeatPicker() {
-  if (!featPick) return;
+  const pick = featPick || spamAct;
+  if (!pick) return;
   const box = $('am-list'); if (!box) return;
   const list = (cfg.accounts && cfg.accounts.list) ? cfg.accounts.list : [];
   const live = {};
   (slotInfo.list || []).forEach((x) => { live[x.accountId] = x; });
   box.innerHTML = list.length
     ? list.map((a) => {
-      const on = featPick.sel.indexOf(a.id) !== -1;
+      const on = pick.sel.indexOf(a.id) !== -1;
       const s = live[a.id];
       const tag = s ? '#' + s.slot : T(a.type === 'microsoft' ? 'amPremium' : 'amCracked');
       return `<button class="amrow${on ? ' on' : ''}" data-amid="${attr(a.id)}">
@@ -1004,12 +1079,12 @@ function renderFeatPicker() {
   box.querySelectorAll('[data-amid]').forEach((b) => {
     b.onclick = () => {
       const id = b.dataset.amid;
-      const i = featPick.sel.indexOf(id);
-      if (i === -1) featPick.sel.push(id); else featPick.sel.splice(i, 1);
+      const i = pick.sel.indexOf(id);
+      if (i === -1) pick.sel.push(id); else pick.sel.splice(i, 1);
       renderFeatPicker();
     };
   });
-  const c = $('am-count'); if (c) c.textContent = featPick.sel.length + '/' + list.length;
+  const c = $('am-count'); if (c) c.textContent = pick.sel.length + '/' + list.length;
 }
 // enabled=false ile cagrilirsa hesap secimi SILINMEZ, ayar sadece kapanir
 async function commitFeatPicker(ids, enabled) {
@@ -1017,10 +1092,65 @@ async function commitFeatPicker(ids, enabled) {
   const key = featPick.key;
   const label = featLabel(key);
   closeFeatPicker();
+  if (key === 'startup') {
+    const valid = accIdList();
+    const clean = (ids || []).filter((id) => valid.indexOf(id) !== -1);
+    const on = enabled === undefined ? clean.length > 0 : !!enabled;
+    cfg.settings.startupAccounts = on ? clean : [];
+    await save({ settings: { startupAccounts: on ? clean : [], startWithWindows: on } });
+    paintStartupRow();
+    window.toast(on
+      ? T('tFeatSaved').replace('{s}', label).replace('{n}', String(clean.length))
+      : T('tFeatOff').replace('{s}', label),
+      on ? 'ok' : 'info');
+    return;
+  }
   const saved = await saveFeature(key, ids, enabled);
   window.toast(saved.length
     ? T('tFeatSaved').replace('{s}', label).replace('{n}', String(saved.length))
-    : T('tFeatOff').replace('{s}', label), saved.length ? 'ok' : 'info');
+    : (key === 'autoSpam' ? T('tAutoSpamOff') : T('tFeatOff').replace('{s}', label)),
+    saved.length ? 'ok' : 'info');
+}
+
+/* --- START / STOP icin gecici hesap secimi --------------------------------
+   AUTO SPAM sayfasindaki BASLAT/DURDUR, "Baglaninca otomatik baslat" ayarindan
+   tamamen bagimsizdir. Bu picker hicbir ayara yazmaz; secilen hesaplarda
+   spamMany uzerinden islem yapar ve biter. */
+function openSpamActPicker(start) {
+  if (!cfg) return;
+  vpnPick = null;
+  featPick = null;
+  const all = accIdList();
+  // Varsayilan secim: BASLAT icin bagli olan hesaplar,
+  // DURDUR icin su an spam'i DONEN hesaplar.
+  const sel = (slotInfo.list || [])
+    .filter((x) => all.indexOf(x.accountId) !== -1 && (start ? true : !!x.spam))
+    .map((x) => x.accountId);
+  spamAct = { start: !!start, sel };
+  $('am-off').classList.add('hidden');   // gecici islem: "ayari kapat" yok
+  const t = $('am-title'); if (t) t.textContent = T(start ? 'spamStartAsk' : 'spamStopAsk');
+  const sub = document.querySelector('#acc-modal [data-i18n="amSub"]');
+  if (sub) sub.textContent = T(start ? 'spamStartSub' : 'spamStopSub');
+  renderFeatPicker();
+  const m = $('acc-modal'); if (m) m.classList.remove('hidden');
+}
+function closeSpamActPicker() {
+  spamAct = null;
+  const m = $('acc-modal'); if (m) m.classList.add('hidden');
+}
+// Secim SADECE o anki islemde kullanilir: hicbir ayara/fonksiyona yazilmaz.
+async function commitSpamAct() {
+  if (!spamAct) return;
+  const start = spamAct.start;
+  const ids = spamAct.sel.slice();
+  closeSpamActPicker();
+  if (!ids.length) { window.toast(T('tSpamPickFirst'), 'warn'); return; }
+  const live = (slotInfo.list || []).filter((x) => ids.indexOf(x.accountId) !== -1);
+  if (!live.length) { window.toast(T('tSpamNoLive'), 'warn'); return; }
+  const r = await bridge.bot.spamMany({ start, accountIds: ids });
+  const names = (r && r.list ? r.list : []).filter((x) => x.ok).map((x) => x.name || accNameOf(x.accountId)).filter(Boolean);
+  if (r && r.ok) window.toast((start ? T('tSpamStarted') : T('tSpamStopped')) + (names.length ? ': ' + names.join(', ') : ''), start ? 'ok' : 'info');
+  else window.toast(T(start ? 'tSpamStartFail' : 'tSpamStopFail'), 'error');
 }
 
 /* --- PANEL'e sabitlenen ayarlar ------------------------------------------ */
@@ -1033,7 +1163,7 @@ function renderDashTiles() {
   const box = $('dash-tiles'); if (!box) return;
   const keys = dashTiles();
   box.innerHTML = keys.map((k) => `<label class="check dashtile" data-tip-key="${k}">
-      <input type="checkbox" ${k === 'autoScrollLogs' ? 'data-logauto="1"' : `data-featacc="${k}"`} />
+      <input type="checkbox" data-featacc="${k}" />
       <span>${esc(featLabel(k))}</span>
       <button class="icon-btn dtx" data-dtx="${k}" title="${attr(T('remove'))}">×</button>
     </label>`).join('');
@@ -1049,22 +1179,12 @@ function renderDashTiles() {
   box.querySelectorAll('[data-featacc]').forEach((el) => {
     el.addEventListener('click', (e) => { e.preventDefault(); toggleFeatureForActive(el.dataset.featacc); });
   });
-  box.querySelectorAll('[data-logauto]').forEach((el) => {
-    el.checked = !cfg || !cfg.settings || cfg.settings.autoScrollLogs !== false;
-    el.addEventListener('click', async (e) => {
-      e.preventDefault();
-      el.checked = !el.checked;
-      await save({ settings: { autoScrollLogs: el.checked } });
-      [$('log-autoscroll'), $('dash-autoscroll'), $('chat-autoscroll'), $('panel-autoscroll')].forEach((x) => { if (x) x.checked = el.checked; });
-    });
-  });
   paintDashTiles();
 }
 // Panelde secili hesabin durumu
 function paintDashTiles() {
   const acc = activeAccountId();
   document.querySelectorAll('[data-featacc]').forEach((el) => { el.checked = featOnFor(el.dataset.featacc, acc); el.classList.remove('part'); });
-  document.querySelectorAll('[data-logauto]').forEach((el) => { el.checked = !cfg || !cfg.settings || cfg.settings.autoScrollLogs !== false; });
   const who = $('dash-quick-who');
   if (who) {
     const a = (cfg && cfg.accounts && cfg.accounts.list || []).find((x) => x.id === acc);
@@ -1101,8 +1221,8 @@ function renderTilePicker() {
   const box = $('fp-list'); if (!box) return;
   box.innerHTML = PANEL_KEYS.map((k) => {
     const on = tilePick.indexOf(k) !== -1;
-    const st = k === 'autoScrollLogs' ? ((!cfg || !cfg.settings || cfg.settings.autoScrollLogs === false) ? 'off' : 'all') : featState(k);
-    const tag = k === 'autoScrollLogs' ? T('logs') : T(FEATURE_PAGE[k] || 'navConnect');
+    const st = featState(k);
+    const tag = T(FEATURE_PAGE[k] || 'navConnect');
     return `<button class="amrow${on ? ' on' : ''}" data-fpk="${k}">
       <i class="amck"></i><span class="amname">${esc(featLabel(k))}</span>
       <span class="amtag${st === 'off' ? '' : ' live'}">${esc(tag)}</span></button>`;
@@ -1272,7 +1392,6 @@ window.TIPS = {
     vanillaLike: 'İstemci kendini vanilla Minecraft gibi tanıtır (brand paketi "vanilla"). Bot koruması olan sunucularda açık kalması daha güvenli.',
     'rc-enabled': 'Bağlantı koparsa kendiliğinden yeniden bağlanır.',
     'r-unlimited': 'Sınırsız deneme: bağlantı kurulana kadar tekrar dener. Kapatırsan "En fazla deneme" kadar dener.',
-    'chat-autoscroll': 'Yeni mesaj gelince sohbet penceresi kendiliğinden en alta kayar.',
     'spam-random': 'Mesajları listedeki sırayla değil rastgele gönderir.',
     'spam-autostart': 'Bot oyuna girer girmez otomatik mesaj göndermeye başlar.',
     'join-enabled': 'Giriş komutlarını açar/kapatır. Bu anahtar BAĞLANTI sayfasındaki "Giriş komutları" ile aynıdır.',
@@ -1288,8 +1407,8 @@ window.TIPS = {
     'afk-sneak': 'Aralıklarla eğilir (Shift).',
     'afk-rotate': 'Kendi etrafında döner.',
     'afk-look': 'Rastgele yönlere bakar.',
-    's-startup': 'Bilgisayar açılınca uygulama kendiliğinden başlar. Yanındaki dişliden hangi hesapların '
-      + 'otomatik bağlanacağını seçebilirsin.',
+    's-startup': 'Bilgisayar açılınca uygulama kendiliğinden başlar. Checkbox\'a basınca hangi hesapların '
+      + 'otomatik bağlanacağını seçersin.',
     's-notify': 'Sadece gerçekten önemli olaylarda (hata, sunucudan atılma) Windows bildirimi gösterir.',
     's-lowcpu': 'Animasyonları ve güncelleme sıklığını azaltır; zayıf bilgisayarlarda işlemciyi rahatlatır.',
     's-mem': 'Sohbet ve kayıt satırlarını daha az tutar; uygulama daha az RAM kullanır.',
@@ -1315,7 +1434,6 @@ window.TIPS = {
     vanillaLike: 'The client identifies itself as vanilla Minecraft (brand packet "vanilla"). Safer on servers with anti-bot checks.',
     'rc-enabled': 'Reconnects by itself if the connection drops.',
     'r-unlimited': 'Unlimited attempts: keeps retrying until it connects. With it off only "Max attempts" tries are made.',
-    'chat-autoscroll': 'The chat window scrolls to the bottom when a new message arrives.',
     'spam-random': 'Sends the messages in random order instead of list order.',
     'spam-autostart': 'The bot starts sending the messages as soon as it joins.',
     'join-enabled': 'Turns join messages on or off. This is the same switch as "Join messages" on the CONNECT page.',
@@ -1331,7 +1449,7 @@ window.TIPS = {
     'afk-sneak': 'Sneaks (Shift) at intervals.',
     'afk-rotate': 'Spins around.',
     'afk-look': 'Looks in random directions.',
-    's-startup': 'The app starts by itself when the computer starts. Use the gear next to it to pick which '
+    's-startup': 'The app starts by itself when the computer starts. Click the checkbox to pick which '
       + 'accounts connect automatically.',
     's-notify': 'Shows a Windows notification on important events (connected, kicked).',
     's-lowcpu': 'Reduces animations and update frequency; easier on weak computers.',
@@ -1665,6 +1783,9 @@ const screenUnreadSlots = new Set();
 function paintScreenAlert() {
   const badge = $('screen-alert');
   if (badge) badge.classList.toggle('hidden', screenUnreadSlots.size === 0);
+  // Sol sekmelerdeki PANEL butonunda da ayni animasyonlu unlem parlar
+  const navBadge = $('nav-panel-alert');
+  if (navBadge) navBadge.classList.toggle('hidden', screenUnreadSlots.size === 0);
 }
 function clearCurrentScreenAlert() {
   screenUnreadSlots.delete(effChatSlot());
@@ -2058,6 +2179,7 @@ async function renderLogHistory() {
 const logBox = $('log-box');
 const seenLogIds = new Set();          // ayni log satiri iki kez eklenmesin
 function addLogLine(e) {
+  const stickLog = atChatBottom(logBox);
   if (!e) return;
   if (e.id !== undefined) {
     if (seenLogIds.has(e.id)) return;
@@ -2075,14 +2197,13 @@ function addLogLine(e) {
   logBox.appendChild(div);
   const logLimit = cfg && cfg.settings.memoryOptimization ? 400 : 800;
   while (logBox.childElementCount > logLimit) logBox.removeChild(logBox.firstChild);
-  if ($('log-autoscroll') && $('log-autoscroll').checked) logBox.scrollTop = logBox.scrollHeight;
+  if (stickLog) snapChatToBottom(logBox);
 }
 
 /* ============================== SETTINGS ================================== */
 function fillSettings() {
   const s = cfg.settings;
   const map = {
-    's-startup': 'startWithWindows',
     's-notify': 'notifications',
     's-lowcpu': 'lowCpuMode', 's-mem': 'memoryOptimization',
     's-packetlog': 'packetLog'
@@ -2092,7 +2213,19 @@ function fillSettings() {
     el.checked = !!s[map[id]];
     el.onchange = () => { save({ settings: { [map[id]]: el.checked } }); window.toast(T('tSettingSaved'), 'ok'); };
   });
-  renderStartupList();
+  // "Baslangicta acilsin": disli kaldirildi; checkbox her iki yonde de
+  // (acarken ve kapatirken) hesap secme penceresi acar, diger ayarlar gibi.
+  const suEl = $('s-startup');
+  if (suEl && !suEl.dataset.startupBound) {
+    suEl.dataset.startupBound = '1';
+    paintStartupRow();
+    suEl.addEventListener('click', (e) => { e.preventDefault(); openStartupPicker(); });
+    suEl.addEventListener('keydown', (e) => {
+      if (e.key !== ' ' && e.key !== 'Enter') return;
+      e.preventDefault();
+      suEl.click();
+    });
+  }
   $('s-theme').value = s.theme;
   $('s-lang').value = s.language;
   try { window.refreshSelect($('s-theme')); window.refreshSelect($('s-lang')); } catch (_) {}
@@ -2299,7 +2432,7 @@ bridge.on('slots', (d) => {
   if (!d) return;
   const before = (slotInfo.list || []).map((s) => s.slot);
   slotInfo = { list: d.list || [], active: Number(d.active) || 0 };
-  try { applyFeatureUI(); if (featPick) renderFeatPicker(); } catch (_) {}
+  try { applyFeatureUI(); if (featPick || spamAct) renderFeatPicker(); } catch (_) {}
   const now = slotInfo.list.map((s) => s.slot);
   const gone = before.some((n) => !now.includes(n));     // oturum kapandi mi?
   if (gone) { before.filter((n) => !now.includes(n)).forEach((n) => { unreadChat.delete(n); unreadLog.delete(n); }); }
@@ -2329,11 +2462,16 @@ window.addEventListener('page-change', (e) => {
   if (pg === 'macrofarmer') startMacroScreenAuto(); else stopMacroScreenAuto();
   if (pg === 'screen') startLiveScreen(); else stopLiveScreen();
   // AYARLAR sayfasindan cikip geri gelince acik panelleri kapat
-  ['s-startup-panel', 's-info-panel'].forEach((id) => {
+  ['s-info-panel'].forEach((id) => {
     const el = $(id); if (el) el.classList.remove('open');
   });
-  const sg = $('s-startup-gear'); if (sg) sg.classList.remove('open');
   const it = $('s-info-toggle'); if (it) it.setAttribute('aria-expanded', 'false');
+  // Sayfaya girince sohbet / kayitlar / canli sohbet en son mesaja kayar
+  setTimeout(() => {
+    try { if (logBox) snapChatToBottom(logBox); } catch (_) {}
+    try { if (chatBox) snapChatToBottom(chatBox); } catch (_) {}
+    try { const d = document.getElementById('dash-chat'); if (d) snapChatToBottom(d); } catch (_) {}
+  }, 80);
   try { applyFeatureUI(); } catch (_) {}
 });
 
@@ -2464,11 +2602,10 @@ function bindStatic() {
   $('q-connect').onclick = () => connectPicked();
   $('q-disconnect').onclick = () => disconnectAll();
   $('q-spam').onclick = async () => {
-    await toggleFeatureForActive('autoSpam');
-    const acc = activeAccountId();
-    const on = featOnFor('autoSpam', acc);
-    const r = on ? await bridge.bot.spamStart(effChatSlot()) : await bridge.bot.spamStop(effChatSlot());
-    if (on && (!r || !r.ok)) window.toast(T('tSpamFail'), 'warn');
+    const r = state.spam
+      ? await bridge.bot.spamStop(effChatSlot())
+      : await bridge.bot.spamStart(effChatSlot());
+    if (!r || !r.ok) window.toast(T('tSpamFail'), 'warn');
   };
   $('q-join').onclick = async () => {
     const r = await bridge.bot.runJoin(effChatSlot());
@@ -2477,19 +2614,37 @@ function bindStatic() {
   // Chat
   $('chat-send').onclick = () => sendChat('chat-input');
   $('dash-chat-send').onclick = () => sendChat('dash-chat-input');
-  $('dash-chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat('dash-chat-input'); });
+  const bindChatInput = (inputId) => {
+    const el = $(inputId); if (!el) return;
+    el.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        await sendChat(inputId);
+      } else if (e.key === 'ArrowUp' && !e.altKey && !e.ctrlKey && !e.shiftKey) {
+        e.preventDefault();
+        moveChatHistory(inputId, -1);
+      } else if (e.key === 'ArrowDown' && !e.altKey && !e.ctrlKey && !e.shiftKey) {
+        e.preventDefault();
+        moveChatHistory(inputId, 1);
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        await completeChatInput(inputId);
+      }
+    });
+    el.addEventListener('input', () => resetChatTab(inputId));
+  };
+  bindChatInput('dash-chat-input');
   $('chat-clear').onclick = () => {
     chatBox.innerHTML = '';
     const d = document.getElementById('dash-chat'); if (d) d.innerHTML = '';
     window.toast(T('tChatCleared'), 'info');
   };
-  $('chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat('chat-input'); });
+  bindChatInput('chat-input');
   // Auto Spam
   $('spam-add').onclick = () => { if (cfg) persistSpamMessages(spamView().messages.concat([''])); };
   $('spam-start').onclick = () => spamRunAll(true);
   $('spam-stop').onclick = () => spamRunAll(false);
   $('spam-mode').onchange = updateSpamMode;
-  $('spam-pick').onclick = () => openFeatPicker('autoSpam');
   $('spam-profile').onchange = () => {
     spamProfile = $('spam-profile').value || '';
     fillSpam(); renderSpamList();
@@ -2544,22 +2699,7 @@ function bindStatic() {
   // Proxies
   $('p-add').onclick = addProxy;
   if ($('tor-start')) { $('tor-start').onclick = toggleVpn; $('tor-new').onclick = newTorIdentity; $('vpn-settings').onclick = openVpnSettings; $('vpn-settings-save').onclick = saveVpnSettings; $('vpn-country').onclick = openVpnCountries; $('vpn-country-done').onclick = saveVpnCountries; $('vpn-country-reset').onclick = resetVpnCountries; renderTor(); }
-  // Logs
-  const logAuto = $('log-autoscroll');
-  const dashAuto = $('dash-autoscroll');
-  const chatAuto = $('chat-autoscroll');
-  const panelAuto = $('panel-autoscroll');
-  const setAutoScroll = async (value, source) => {
-    if (cfg) await save({ settings: { autoScrollLogs: !!value } });
-    const v = !!value;
-    [logAuto, dashAuto, chatAuto, panelAuto].forEach((el) => { if (el && source !== el) el.checked = v; });
-    const tile = document.querySelector('[data-logauto]'); if (tile && source !== tile) tile.checked = v;
-  };
-  [logAuto, dashAuto, chatAuto, panelAuto].forEach((el) => {
-    if (!el) return;
-    el.checked = !cfg || !cfg.settings || cfg.settings.autoScrollLogs !== false;
-    el.onchange = () => setAutoScroll(el.checked, el);
-  });
+  // Logs - "Otomatik kaydir" kaldirildi, kayitlar akilli kayar
   $('log-clear').onclick = async () => { await bridge.logs.clear(); logBox.innerHTML = ''; seenLogIds.clear(); window.toast(T('tLogsCleared'), 'info'); };
   $('log-export').onclick = async () => {
     const r = await bridge.logs.export();
@@ -2582,7 +2722,7 @@ function bindStatic() {
     await save({ settings: { language: $('s-lang').value } });
     window.applyI18n();
     renderAccounts(); renderProxies(); renderSpamList(); renderJoinList();
-    renderSpamProfiles(); renderSpamPicked(); paintUpdateState();
+    renderSpamProfiles(); paintUpdateState();
     renderMacro(); renderSlotTabs(); applyState(state);
     document.documentElement.lang = $('s-lang').value;
     window.toast(T('tLangSet'), 'ok');
@@ -2591,17 +2731,6 @@ function bindStatic() {
   $('s-openlog').onclick = () => bridge.openLog();
   // Guncelleme: tek tikla indir, sessiz kur ve yeniden baslat.
   const uBtn = $('upd-btn'); if (uBtn) uBtn.onclick = installUpdateNow;
-  // "Baslangicta acilsin" disli tusu: otomatik baglanacak hesaplari secme paneli
-  const suGear = $('s-startup-gear'); const suPanel = $('s-startup-panel');
-  if (suGear && suPanel) {
-    suGear.onclick = (e) => {
-      e.preventDefault(); e.stopPropagation();
-      const on = !suPanel.classList.contains('open');
-      suPanel.classList.toggle('open', on);
-      suGear.classList.toggle('open', on);
-      if (on) renderStartupList();
-    };
-  }
   // Uygulama bilgileri (kucuk "i" tusu)
   const itg = $('s-info-toggle'); const ipn = $('s-info-panel');
   if (itg && ipn) {
@@ -2629,14 +2758,14 @@ function bindStatic() {
   bindSbPop('sb-server-btn', 'sb-server-pop');
   bindSbPop('sb-account-btn', 'sb-account-pop');
   // --- Hesap secme penceresi -----------------------------------------------
-  const amSave = $('am-save'); if (amSave) amSave.onclick = () => { if (vpnPick) commitVpnPicker(); else if (featPick) commitFeatPicker(featPick.sel.slice()); };
+  const amSave = $('am-save'); if (amSave) amSave.onclick = () => { if (vpnPick) commitVpnPicker(); else if (spamAct) commitSpamAct(); else if (featPick) commitFeatPicker(featPick.sel.slice()); };
   // secimi silmeden kapat
   const amOff = $('am-off'); if (amOff) amOff.onclick = () => { if (featPick) commitFeatPicker(featPick.sel.slice(), false); };
-  const amAll = $('am-all'); if (amAll) amAll.onclick = () => { if (vpnPick) { vpnPick.sel = accIdList(); renderVpnAccountPicker(); } else if (featPick) { featPick.sel = accIdList(); renderFeatPicker(); } };
-  const amNone = $('am-none'); if (amNone) amNone.onclick = () => { if (vpnPick) { vpnPick.sel = []; renderVpnAccountPicker(); } else if (featPick) { featPick.sel = []; renderFeatPicker(); } };
-  const amCan = $('am-cancel'); if (amCan) amCan.onclick = () => { if (vpnPick) closeVpnAccountPicker(); else closeFeatPicker(); };
+  const amAll = $('am-all'); if (amAll) amAll.onclick = () => { if (vpnPick) { vpnPick.sel = accIdList(); renderVpnAccountPicker(); } else if (spamAct) { spamAct.sel = accIdList(); renderFeatPicker(); } else if (featPick) { featPick.sel = accIdList(); renderFeatPicker(); } };
+  const amNone = $('am-none'); if (amNone) amNone.onclick = () => { if (vpnPick) { vpnPick.sel = []; renderVpnAccountPicker(); } else if (spamAct) { spamAct.sel = []; renderFeatPicker(); } else if (featPick) { featPick.sel = []; renderFeatPicker(); } };
+  const amCan = $('am-cancel'); if (amCan) amCan.onclick = () => { if (vpnPick) closeVpnAccountPicker(); else if (spamAct) closeSpamActPicker(); else closeFeatPicker(); };
   const amMod = $('acc-modal');
-  if (amMod) amMod.addEventListener('click', (e) => { if (e.target !== amMod) return; if (vpnPick) closeVpnAccountPicker(); else closeFeatPicker(); });
+  if (amMod) amMod.addEventListener('click', (e) => { if (e.target !== amMod) return; if (vpnPick) closeVpnAccountPicker(); else if (spamAct) closeSpamActPicker(); else closeFeatPicker(); });
   const vpnSettingsMod = $('vpn-settings-modal'); if (vpnSettingsMod) vpnSettingsMod.addEventListener('click', (e) => { if (e.target === vpnSettingsMod) closeVpnSettings(); });
   const vpnCountryMod = $('vpn-country-modal'); if (vpnCountryMod) vpnCountryMod.addEventListener('click', (e) => { if (e.target === vpnCountryMod) vpnCountryMod.classList.add('hidden'); });
   // --- PANEL'e ayar sabitleme ---------------------------------------------
@@ -2655,6 +2784,7 @@ function bindStatic() {
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (vpnPick) closeVpnAccountPicker();
+    else if (spamAct) closeSpamActPicker();
     else if (featPick) closeFeatPicker();
     if (tilePick) closeTilePicker();
     if ($('vpn-settings-modal') && !$('vpn-settings-modal').classList.contains('hidden')) closeVpnSettings();

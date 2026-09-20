@@ -769,6 +769,15 @@ ipcMain.handle('bot:active', (_e, slot) => {
   return b ? b.state() : offlineState();
 });
 ipcMain.handle('bot:slots', () => ({ list: slotList(), active: activeSlot }));
+ipcMain.handle('bot:players', (_e, slot) => {
+  const b = botBySlot(Number(slot) || 0);
+  return b && typeof b.playerNames === 'function' ? b.playerNames() : [];
+});
+ipcMain.handle('bot:tab-complete', async (_e, payload) => {
+  const p = payload || {};
+  const b = botBySlot(Number(p.slot) || 0);
+  return b && typeof b.tabComplete === 'function' ? b.tabComplete(p.query || '') : [];
+});
 ipcMain.handle('chat:history', (_e, slot) => {
   const s = slot ? sessionBySlot(slot) : activeSession();
   return s ? s.chat : [];

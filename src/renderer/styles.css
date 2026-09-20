@@ -125,6 +125,7 @@ button, input, select { font-family: inherit; }
   animation: slideIn .22s var(--ease);
 }
 @keyframes slideIn { from { transform: scaleY(.2); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+.nav .screen-alert { flex: 0 0 auto; align-self: center; }
 .sidebar-foot { margin-top: auto; padding: 12px 14px; font-size: 10px; color: var(--muted); letter-spacing: 1px; }
 
 .content { flex: 1; min-width: 0; overflow-y: auto; padding: 24px 28px 34px; }
@@ -826,12 +827,8 @@ textarea, .console, .list, .content, .mini-log, .dlg-body { scrollbar-gutter: st
 
 /* ---------------------------- Ayarlar: bilgi ------------------------------ */
 .info-wrap { margin-top: 12px; }
-#s-startup-panel.drop-panel.open { max-height: 286px; }
-#s-startup-list { max-height: 240px; overflow-y: auto; }
-#s-startup-list .item { padding: 7px 9px; }
-#s-startup-list .item { cursor: pointer; }
 #s-info-panel.drop-panel.open { max-height: 190px; }
-#s-appinfo { white-space: pre-line; line-height: 1.6; word-break: break-all; }
+#s-appinfo { white-space: pre-line; line-height: 1.6; word-break: break-all; padding-top: 2px; }
 .info-toggle {
   width: 22px; height: 22px; border-radius: 99px; cursor: pointer;
   background: var(--card-2); border: 1px solid var(--border); color: var(--muted);

@@ -64,7 +64,7 @@
 <div class="shell">
   <!-- ===================== SIDEBAR ===================== -->
   <nav class="sidebar">
-    <button class="nav active" data-page="dashboard"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span data-i18n="navDashboard">DASHBOARD</span></button>
+    <button class="nav active" data-page="dashboard"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span data-i18n="navDashboard">DASHBOARD</span><b class="screen-alert nav-alert hidden" id="nav-panel-alert">!</b></button>
     <button class="nav" data-page="connect"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/></svg><span data-i18n="navConnect">CONNECT</span></button>
     <button class="nav" data-page="chat"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span data-i18n="navChat">CHAT</span></button>
     <button class="nav" data-page="join"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg><span data-i18n="navJoin">JOIN MESSAGES</span></button>
@@ -74,7 +74,7 @@
     <button class="nav" data-page="proxies"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="6" rx="2"/><rect x="2" y="15" width="20" height="6" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg><span data-i18n="navProxies">PROXIES</span></button>
     <button class="nav" data-page="logs"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 10h16"/><path d="M4 15h10"/><path d="M4 20h7"/></svg><span data-i18n="navLogs">LOGS</span></button>
     <button class="nav" data-page="settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span data-i18n="navSettings">SETTINGS</span></button>
-    <div class="sidebar-foot"><span id="foot-ver">v1.15.12</span><span class="made">made by Poltaaa</span></div>
+    <div class="sidebar-foot"><span id="foot-ver">v1.15.13</span><span class="made">made by Poltaaa</span></div>
   </nav>
 
   <!-- ===================== MAIN ===================== -->
@@ -88,7 +88,6 @@
           <div class="card-head">
             <span data-i18n="liveChat">LIVE CHAT</span>
             <div class="row gap">
-              <label class="check tiny-check"><input type="checkbox" id="dash-autoscroll" checked /><span data-i18n="autoScroll">Auto-scroll</span></label>
               <span class="head-note" id="dash-chat-note">-</span>
             </div>
           </div>
@@ -127,7 +126,6 @@
           <div class="card dash-quick">
             <div class="card-head"><span data-i18n="dashQuick">QUICK SETTINGS</span><span class="head-note" id="dash-quick-who">-</span></div>
             <div class="check-list" id="dash-tiles"></div>
-            <label class="check tiny-check panel-auto-row"><input type="checkbox" id="panel-autoscroll" checked /><span data-i18n="autoScroll">Auto-scroll</span></label>
             <div class="row wrap gap qrow">
               <button class="btn tiny" id="q-spam" data-i18n="qSpamStart">Start Auto Spam</button>
               <button class="btn tiny" id="q-join" data-i18n="qJoin">Run Join Messages</button>
@@ -223,7 +221,6 @@
         <div class="card-head">
           <span data-i18n="liveChat">LIVE CHAT</span>
           <div class="row gap">
-            <label class="check tiny-check"><input type="checkbox" id="chat-autoscroll" checked /><span data-i18n="autoScroll">Auto-scroll</span></label>
             <button class="btn tiny" id="chat-clear" data-i18n="clearChat">Clear chat</button>
           </div>
         </div>
@@ -251,11 +248,6 @@
         </div>
         <div class="card">
           <div class="card-head" data-i18n="settingsCaps">SETTINGS</div>
-          <div class="picked" id="spam-picked">
-            <span class="pk-lab" data-i18n="spamRunsOn">Runs on</span>
-            <span class="pk-val" id="spam-picked-names">-</span>
-            <button class="btn tiny" id="spam-pick" data-i18n="chooseAccounts">Choose accounts</button>
-          </div>
           <div class="check-list">
             <label class="check"><input type="checkbox" id="spam-autostart" data-feat="autoSpam" /><span data-i18n="spamAutostart">Start automatically when connected</span></label>
             <label class="check"><input type="checkbox" id="spam-random" /><span data-i18n="randomOrder">Random message order</span></label>
@@ -507,7 +499,6 @@
             <label class="check tiny-check"><input type="checkbox" data-lvl="RECONNECT" checked /><span>RECONNECT</span></label>
           </div>
           <div class="row gap">
-            <label class="check tiny-check"><input type="checkbox" id="log-autoscroll" checked /><span data-i18n="autoScroll">Auto-scroll</span></label>
             <button class="btn tiny" id="log-clear" data-i18n="clearLogs">Clear logs</button>
             <button class="btn tiny" id="log-export" data-i18n="exportLogs">Export logs</button>
           </div>
@@ -533,11 +524,7 @@
         <div class="card">
           <div class="card-head" data-i18n="general">GENERAL</div>
           <div class="stack0">
-          <label class="check"><input type="checkbox" id="s-startup" /><span data-i18n="startWithWindows">Open at startup</span><button class="gear" id="s-startup-gear" data-i18n-title="startupPick" title="Pick accounts"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
-          <div class="drop-panel" id="s-startup-panel">
-            <p class="hint" data-i18n="startupHint">These accounts connect automatically when the computer starts.</p>
-            <div class="list slim" id="s-startup-list"></div>
-          </div>
+          <label class="check"><input type="checkbox" id="s-startup" /><span data-i18n="startWithWindows">Open at startup</span></label>
           </div>
           <label class="check"><input type="checkbox" id="s-notify" /><span data-i18n="notifications">Notifications</span></label>
         </div>

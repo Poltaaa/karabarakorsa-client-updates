@@ -18,6 +18,20 @@ const chatFmt = require('./chat-format');
 const ResourcePack = require('./respack');
 const { buildConnect } = require('./proxy');
 
+function reconcileChatSpans(flat, spans) {
+  const text = String(flat || '');
+  const list = Array.isArray(spans) ? spans.filter((s) => s && s.t) : [];
+  if (!text) return list;
+  const structured = chatFmt.flatten(list);
+  if (!structured) return [{ t: text }];
+  if (structured === text) return list;
+  // Preserve parsed colours while restoring a prefix/suffix that the
+  // translation table omitted from the structured component.
+  if (text.endsWith(structured)) return [{ t: text.slice(0, -structured.length) }, ...list].filter((s) => s.t);
+  if (text.startsWith(structured)) return [...list, { t: text.slice(structured.length) }].filter((s) => s.t);
+  return structured.length > text.length ? list : [{ t: text }];
+}
+
 class BotManager extends EventEmitter {
   constructor(logger, authCacheDir) {
     super();
@@ -361,7 +375,9 @@ class BotManager extends EventEmitter {
       // table. Prefer the longest complete representation so names/arguments do
       // not disappear from /msg, moderation and announcement messages.
       if (spanText && flat && spanText.length > flat.length) flat = spanText;
-      if (!spans.length || (flat && chatFmt.flatten(spans) !== flat)) spans = flat ? [{ t: flat }] : spans;
+      if (flat && /§[0-9a-fk-orx]/i.test(flat)
+        && !spans.some((s) => s && s.c)) spans = chatFmt.spansOfText(flat);
+      spans = reconcileChatSpans(flat, spans);
       const from = this.senderName(bot, senderUuid);
       // Sunucu adi mesajin icine koymadiysa basina biz ekleyelim
       let show = from && flat.indexOf(from) === -1 ? from : '';
@@ -701,6 +717,40 @@ class BotManager extends EventEmitter {
       }
     } catch (_) { /* yoksay */ }
     return '';
+  }
+
+  playerNames() {
+    try {
+      const players = this.bot && this.bot.players || {};
+      return [...new Set(Object.keys(players).map((key) => {
+        const p = players[key];
+        return String((p && p.username) || key || '').trim();
+      }).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  tabComplete(query) {
+    if (!this.bot || !this.loggedIn || typeof this.bot.tabComplete !== 'function') return Promise.resolve([]);
+    const once = (text) => new Promise((resolve) => {
+      let settled = false;
+      const finish = (err, values) => {
+        if (settled) return;
+        settled = true;
+        if (Array.isArray(err) && values === undefined) { values = err; err = null; }
+        if (err) return resolve([]);
+        const list = Array.isArray(values) ? values : (values && Array.isArray(values.matches) ? values.matches : []);
+        resolve([...new Set(list.map((x) => typeof x === 'string' ? x : (x && (x.match || x.name || x.text || x.value) || ''))
+          .map((x) => String(x).trim()).filter(Boolean))]);
+      };
+      try {
+        const result = this.bot.tabComplete(String(text || ''), finish);
+        if (result && typeof result.then === 'function') result.then((v) => finish(null, v)).catch(() => finish(null, []));
+      } catch (_) { finish(null, []); }
+    });
+    return once(query).then((matches) => matches.length || !String(query || '').startsWith('/')
+      ? matches : once(String(query).slice(1)));
   }
 
   // --- Disaridan cagrilan aksiyonlar ---------------------------------------

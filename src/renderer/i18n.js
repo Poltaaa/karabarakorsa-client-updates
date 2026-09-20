@@ -44,7 +44,7 @@ window.I18N = {
     reconnectInfo: 'Bağlantı koparsa istemci verilen süre kadar bekler ve kendiliğinden yeniden bağlanır. '
       + 'Giriş komutları açıksa her yeniden bağlanmada tekrar gönderilir.',
     /* --- sohbet --- */
-    liveChat: 'CANLI SOHBET', autoScroll: 'Otomatik kaydır', clearChat: 'Sohbeti temizle',
+    liveChat: 'CANLI SOHBET', clearChat: 'Sohbeti temizle',
     send: 'Gönder', chatPh: "Mesaj yaz ve Enter'a bas...",
     allSessions: 'TÜMÜ', sessions: 'OTURUMLAR',
     /* --- otomatik mesaj --- */
@@ -57,7 +57,9 @@ window.I18N = {
     spamOwnList: 'Bu hesaba özel mesaj listesi kullan',
     spamSharedNote: 'Bu hesap ortak listeyi kullanıyor. Kendi mesajlarını yazmak için yukarıdaki kutuyu işaretleyin.',
     spamOwnTag: 'özel', spamOnTag: 'açık',
-    spamRunsOn: 'Çalışacağı hesaplar', chooseAccounts: 'Hesap seç', spamNoAcc: 'hesap seçilmedi',
+    spamStartAsk: 'Spam başlatılacak hesaplar', spamStopAsk: 'Spam durdurulacak hesaplar',
+    spamStartSub: 'Seçtiğin hesaplarda otomatik mesaj hemen başlar. Bu seçim "Bağlanınca otomatik başlat" ayarını değiştirmez.',
+    spamStopSub: 'Seçtiğin hesaplarda otomatik mesaj durdurulur. Bu seçim "Bağlanınca otomatik başlat" ayarını değiştirmez.',
     /* --- guncelleme --- */
     updBtn: 'GÜNCELLE', updTitle: 'Yeni sürüm çıktı', updTitleCaps: 'YENİ SÜRÜM',
     updNow: 'Kurulu sürüm', updDownload: 'İNDİR', updBrowser: 'Tarayıcıda aç',
@@ -116,6 +118,7 @@ window.I18N = {
     amOff: 'HESAP SEÇİMİNİ SİLMEDEN AYARI KAPAT',
     amNoAcc: 'Kayıtlı hesap yok. Önce HESAPLAR sayfasından hesap ekleyin.',
     tFeatSaved: '{s}: {n} hesapta açık', tFeatOff: '{s} kapatıldı',
+    tAutoSpamOff: 'Bağlanınca otomatik başlat kapatıldı',
     dashQuick: 'HIZLI AYARLAR',
     screenOpen: 'Ekran', screenTitle: 'Sunucu ekranı', screenAuto: 'OTOMATİK CANLI',
     screenTip: 'Açık sunucu ekranı otomatik okunur; Ekranı oku düğmesine basman gerekmez.',
@@ -126,9 +129,7 @@ window.I18N = {
     runBackground: 'Arka planda çalışsın',
     startWithWindows: 'Başlangıçta açılsın',
     notifications: 'Bildirimler',
-    startupPick: 'Otomatik bağlanacak hesapları seç',
-    startupHint: 'Seçilen hesaplar bilgisayar açıldığında kendiliğinden bağlanır ve ayarlı '
-      + 'otomatik mesaj / anti AFK / giriş komutları da çalışır.',
+    startupSub: 'Bilgisayar açıldığında seçtiğin hesaplar kendiliğinden bağlanır. Hiçbirini seçmezsen ayar kapanır.',
     performance: 'PERFORMANS', lowCpu: 'Düşük işlemci modu', memOpt: 'Bellek optimizasyonu',
     packetLog: 'Paket günlüğü (hata ayıklama)',
     openFolder: 'Ayar klasörünü aç', openLog: 'Hata kaydını aç', resetSettings: 'Ayarları sıfırla',
@@ -263,7 +264,7 @@ window.I18N = {
     reconnectInfoHead: 'HOW IT WORKS',
     reconnectInfo: 'If the connection drops, the client waits for the given delay and reconnects by itself. '
       + 'When join messages are on they are sent again after every reconnect.',
-    liveChat: 'LIVE CHAT', autoScroll: 'Auto-scroll', clearChat: 'Clear chat',
+    liveChat: 'LIVE CHAT', clearChat: 'Clear chat',
     send: 'Send', chatPh: 'Type a message and press Enter...',
     allSessions: 'ALL', sessions: 'SESSIONS',
     spamActive: 'AUTO SPAM ACTIVE', messagesCaps: 'MESSAGES', msgOne: 'Message',
@@ -275,7 +276,9 @@ window.I18N = {
     spamOwnList: 'Give this account its own message list',
     spamSharedNote: 'This account uses the shared list. Tick the box above to write its own messages.',
     spamOwnTag: 'own', spamOnTag: 'on',
-    spamRunsOn: 'Runs on', chooseAccounts: 'Choose accounts', spamNoAcc: 'no account selected',
+    spamStartAsk: 'Accounts to start spam on', spamStopAsk: 'Accounts to stop spam on',
+    spamStartSub: 'Auto spam starts right away on the selected accounts. This does not change the "Start automatically when connected" setting.',
+    spamStopSub: 'Auto spam stops on the selected accounts. This does not change the "Start automatically when connected" setting.',
     /* --- update --- */
     updBtn: 'UPDATE', updTitle: 'A new version is available', updTitleCaps: 'NEW VERSION',
     updNow: 'Installed', updDownload: 'DOWNLOAD', updBrowser: 'Open in browser',
@@ -328,6 +331,7 @@ window.I18N = {
     amOff: 'TURN THE SETTING OFF (keeps the selection)',
     amNoAcc: 'No accounts yet. Add one on the ACCOUNTS page first.',
     tFeatSaved: '{s}: on for {n} account(s)', tFeatOff: '{s} turned off',
+    tAutoSpamOff: 'Start automatically when connected turned off',
     dashQuick: 'QUICK SETTINGS',
     screenOpen: 'Screen', screenTitle: 'Server screen', screenAuto: 'AUTO LIVE',
     screenTip: 'The open server screen is read automatically; you do not need to press Read screen.',
@@ -338,9 +342,7 @@ window.I18N = {
     runBackground: 'Run in the background',
     startWithWindows: 'Open at startup',
     notifications: 'Notifications',
-    startupPick: 'Pick the accounts to connect automatically',
-    startupHint: 'The selected accounts connect by themselves when the computer starts, together with '
-      + 'their auto spam / anti AFK / join messages settings.',
+    startupSub: 'The accounts you pick connect by themselves when the computer starts. With none selected the setting turns off.',
     performance: 'PERFORMANCE', lowCpu: 'Low CPU mode', memOpt: 'Memory optimization',
     packetLog: 'Packet log (debug)',
     openFolder: 'Open config folder', openLog: 'Open error log', resetSettings: 'Reset settings',

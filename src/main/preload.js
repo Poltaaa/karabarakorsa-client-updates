@@ -34,7 +34,9 @@ contextBridge.exposeInMainWorld('api', {
     physics: (on) => ipcRenderer.invoke('bot:physics', on),
     slots: () => ipcRenderer.invoke('bot:slots'),
     setActive: (slot) => ipcRenderer.invoke('bot:active', slot),
-    chatHistory: (slot) => ipcRenderer.invoke('chat:history', slot)
+    chatHistory: (slot) => ipcRenderer.invoke('chat:history', slot),
+    players: (slot) => ipcRenderer.invoke('bot:players', slot),
+    tabComplete: (query, slot) => ipcRenderer.invoke('bot:tab-complete', { query, slot })
   },
   accounts: {
     add: (a) => ipcRenderer.invoke('accounts:add', a),

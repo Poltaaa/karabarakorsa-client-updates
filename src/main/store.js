@@ -134,7 +134,6 @@ const DEFAULTS = {
     lowCpuMode: false,
     memoryOptimization: true,
     packetLog: false,         // hata ayiklama: tum paket adlarini logla
-    autoScrollLogs: true,
     dashTiles: []             // PANEL sayfasina eklenen hizli ayarlar
   }
 };
@@ -198,6 +197,26 @@ class Store {
       for (const k of FEATURE_KEYS) {
         if (!Array.isArray(data.featureAccounts[k])) data.featureAccounts[k] = [];
         if (typeof data.featureEnabled[k] !== 'boolean') data.featureEnabled[k] = false;
+      }
+      // Manual spam must not silently enable "start when connected". Keep the
+      // selected accounts for manual runs, but reset older auto-start state once.
+      if (!data.__spamManualOnlyMigrated) {
+        data.featureEnabled.autoSpam = false;
+        data.toggles.autoSpam = false;
+        if (data.autoSpam) data.autoSpam.enabled = false;
+        data.__spamManualOnlyMigrated = true;
+      }
+      // "Otomatik kaydir" ayarlari kaldirildi: eski config'lerden temizlenir.
+      // Sohbet/kayit/panel artik akilli kayar (en alttayken takilir, yukari
+      // kaydirinca ekran yerinde kalir, yeni mesajlar zorla indirmez).
+      if (!data.__noAutoScrollMigrated) {
+        if (data.settings) {
+          delete data.settings.autoScrollLogs;
+          if (Array.isArray(data.settings.dashTiles)) {
+            data.settings.dashTiles = data.settings.dashTiles.filter((k) => k !== 'autoScrollLogs');
+          }
+        }
+        data.__noAutoScrollMigrated = true;
       }
       return data;
     } catch (e) {
