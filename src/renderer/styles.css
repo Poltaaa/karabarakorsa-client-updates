@@ -918,6 +918,7 @@ textarea, .console, .list, .content, .mini-log, .dlg-body { scrollbar-gutter: st
 
 /* --- adim listesi --- */
 #mf-steps { gap: 6px; }
+#ms-steps { gap: 6px; }
 .step {
   display: flex; align-items: center; gap: 8px; padding: 7px 8px;
   background: var(--card-2); border: 1px solid var(--border); border-radius: 9px;
@@ -1069,6 +1070,47 @@ body[data-theme="light"] { --part: #7c3aed; --part-dim: rgba(124, 58, 237, .14);
   border-radius: 99px; padding: 2px 7px; font-style: normal; line-height: 1.4;
 }
 .check.part .featn { color: var(--part); background: var(--part-dim); }
+
+/* Paket 77: Deneme sürecindeki özellikler görünür ama bilinçli olarak kilitli.
+   Tıklama açık kalır; kullanıcıya sağ altta neden kapalı olduğu bildirilir. */
+.check.feature-locked {
+  opacity: .43;
+  filter: saturate(.22);
+  cursor: not-allowed;
+  background: rgba(0, 0, 0, .16);
+  border: 1px solid rgba(130, 145, 168, .08);
+  border-radius: 9px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.check.feature-locked:hover span { color: var(--muted); }
+.check.feature-locked input[type="checkbox"] {
+  background: rgba(8, 12, 19, .78);
+  border-color: rgba(130, 145, 168, .22);
+  box-shadow: none;
+}
+.check.feature-locked .gear {
+  color: var(--muted);
+  border-color: transparent;
+  transform: none;
+}
+.check.feature-locked .gear:hover { color: var(--muted); border-color: transparent; transform: none; }
+.locked-note {
+  flex: 0 0 auto !important;
+  color: #697486 !important;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: .45px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.card.feature-locked-card {
+  background: linear-gradient(145deg, rgba(12, 17, 25, .88), rgba(8, 12, 18, .92));
+  border-color: rgba(130, 145, 168, .1);
+}
+.card.feature-locked-card > .card-head,
+.card.feature-locked-card > .hint { opacity: .48; filter: saturate(.2); }
 
 /* --- hesap secme / ayar secme penceresi --- */
 .modal-card.wide { max-width: 470px; }
@@ -1245,3 +1287,98 @@ body[data-theme="light"] { --part: #7c3aed; --part-dim: rgba(124, 58, 237, .14);
 .vpn-country-option input:checked::after { content: '✓'; color: #14181f; font-size: 12px; font-weight: 900; line-height: 1; }
 
 .vpn-main-btn:disabled, .vpn-icon-btn:disabled { opacity: .45; cursor: not-allowed; filter: saturate(.45); }
+
+/* Spawner Protect: mesafe kaydiricisi + guvenilir kisiler (paket 77: yumusak, akici) */
+.slider-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.slider { position: relative; flex: 1; min-width: 0; height: 26px; touch-action: none; }
+.slider-track {
+  position: absolute; left: 0; right: 0; top: 50%; height: 7px; transform: translateY(-50%);
+  border-radius: 99px; background: rgba(255,255,255,.08);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.slider-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; width: var(--fill, 100%); border-radius: 99px;
+  background: linear-gradient(180deg, #ffd76a, var(--accent) 55%, #d9a41c);
+  box-shadow: 0 0 12px rgba(245,197,24,.35);
+  transition: width .16s var(--ease);
+}
+.slider input[type=range] {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+  -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; outline: none;
+}
+.slider input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #d7dbe3);
+  border: 3px solid var(--accent);
+  box-shadow: 0 2px 10px rgba(0,0,0,.55), 0 0 0 4px rgba(245,197,24,.13);
+  transition: transform .14s var(--ease), box-shadow .14s var(--ease);
+}
+.slider input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.18); }
+.slider input[type=range]:active::-webkit-slider-thumb {
+  transform: scale(1.06);
+  box-shadow: 0 2px 10px rgba(0,0,0,.55), 0 0 0 8px rgba(245,197,24,.16);
+}
+.slider input[type=range]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 2px 10px rgba(0,0,0,.55), 0 0 0 4px rgba(245,197,24,.13), 0 0 0 7px rgba(245,197,24,.18);
+}
+.slider input[type=range]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #d7dbe3);
+  border: 3px solid var(--accent);
+  box-shadow: 0 2px 10px rgba(0,0,0,.55), 0 0 0 4px rgba(245,197,24,.13);
+  transition: transform .14s var(--ease);
+}
+.slider input[type=range]::-moz-range-thumb:hover { transform: scale(1.18); }
+.slider input[type=range]::-moz-range-track { background: transparent; }
+.slider-val {
+  min-width: 40px; text-align: center; font-weight: 700; color: var(--accent);
+  font-family: Consolas, monospace; font-size: 13px; letter-spacing: .4px;
+  background: var(--card-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 4px 6px;
+}
+#sp-trusted-list { min-height: 24px; }
+#sp-trusted-list .item .main { min-width: 0; flex: 1; }
+#sp-trusted-list .item {
+  animation: itemIn .18s var(--ease) both;
+  opacity: 0;
+}
+@keyframes itemIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.trusted-input { flex: none; width: 132px; min-width: 0; font-size: 12px; padding: 8px 10px; }
+
+/* Panel: Envanter (paket 77) - Minecraft tarzi, "ekran" paneli kalitesinde */
+.inv-q {
+  width: 36px; height: 28px; border-radius: 8px;
+  background: var(--card-2); border: 1px solid var(--border); color: var(--text); cursor: pointer;
+  transition: color var(--fast), border-color var(--fast), background var(--fast);
+}
+.inv-q:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+.modal-card.form.inv-card { max-width: 540px; text-align: left; }
+.inv-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.inv-account {
+  font-size: 11px; font-weight: 800; letter-spacing: 1px; color: var(--muted); text-transform: uppercase;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.inv-x {
+  width: 28px; height: 28px; flex: none; border-radius: 8px; display: grid; place-items: center; cursor: pointer;
+  background: var(--card-2); border: 1px solid var(--border-2); color: var(--muted);
+  transition: color var(--fast), border-color var(--fast), transform var(--fast);
+}
+.inv-x:hover { color: var(--err); border-color: var(--err); }
+.inv-x:active { transform: scale(.92); }
+.inv-x .ico { width: 13px; height: 13px; }
+.inv-chest { width: 100%; margin: 0; padding: 12px; }
+.inv-body { display: flex; gap: 16px; align-items: stretch; justify-content: center; }
+.inv-side { display: flex; flex-direction: column; justify-content: space-between; }
+.inv-center { display: flex; flex-direction: column; gap: 16px; }
+.inv-grid { display: grid; grid-template-columns: repeat(9, 38px); gap: 4px; }
+.inv-armor { grid-template-columns: 38px; grid-template-rows: repeat(4, 38px); gap: 4px; }
+.inv-offhand { grid-template-columns: 38px; grid-template-rows: 38px; }
+.inv-grid .invcell { cursor: pointer; }
+.inv-hint {
+  font-size: 11px; line-height: 1.6; color: var(--muted); text-align: center;
+  padding: 7px 10px; background: var(--card-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+#inv-status { min-height: 15px; margin: 0; }

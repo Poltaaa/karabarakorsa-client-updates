@@ -23,6 +23,7 @@ class JoinMessages {
   }
 
   // Zinciri kurar. extra = { at, delay, label, run }  (at: 1..n+1, 0 = en son)
+  // Tek nesne veya DIZI olabilir (Paket 72: Auto Farm + Spawner AFK ayni anda).
   plannedList(commands, extra) {
     const list = (commands || [])
       .filter((c) => c && c.enabled && String(c.command || '').trim())
@@ -32,16 +33,21 @@ class JoinMessages {
         command: String(c.command).trim(),
         delay: Math.max(0, Number(c.delay) || 0)
       }));
-    if (extra && typeof extra.run === 'function') {
-      let at = Number(extra.at);
-      if (!Number.isFinite(at) || at <= 0 || at > list.length + 1) at = list.length + 1;
-      list.splice(at - 1, 0, {
-        kind: 'run',
-        label: extra.label || 'macro',
-        run: extra.run,
-        delay: Math.max(0, Number(extra.delay) || 0)
-      });
-    }
+    // En sona eklenen sanal adimlarin dizilimi: her biri "o anki" listedeki
+    // at konumuna yerlestirilir (ilk eklenen once, 0/en son = en sona).
+    const extras = Array.isArray(extra) ? extra : (extra ? [extra] : []);
+    extras.forEach((x) => {
+      if (x && typeof x.run === 'function') {
+        let at = Number(x.at);
+        if (!Number.isFinite(at) || at <= 0 || at > list.length + 1) at = list.length + 1;
+        list.splice(at - 1, 0, {
+          kind: 'run',
+          label: x.label || 'macro',
+          run: x.run,
+          delay: Math.max(0, Number(x.delay) || 0)
+        });
+      }
+    });
     return list;
   }
 

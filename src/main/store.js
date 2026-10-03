@@ -97,6 +97,16 @@ const DEFAULTS = {
     minInterval: 30,
     maxInterval: 60
   },
+  // v1.15.14: Spawner Protect
+  // Yakina bir oyuncu gelince 20 blok yaricipindaki spawnerlar kırılır
+  // (en iyi Ipeksi Dokunuslu kazma + Shift basili tutarak).
+  spawnerProtect: {
+    enabled: false,
+    triggerRadius: 50,   // 1-50: yakina gelen oyuncu algilama mesafesi
+    breakRadius: 20,     // kırma yaricapi (blok)
+    trusted: [],         // guvenilir kisiler: bunlar yakindayken koruma AKTIVE OLMAZ
+    exitAfterBreak: false // paket 77: tum spawnerlar kirilinca oyundan cik
+  },
   autoReconnect: {
     enabled: false,
     delay: 10,
@@ -120,6 +130,31 @@ const DEFAULTS = {
       startMode: 'join',
       joinIndex: 0,           // 0 = giris komutlarindan sonra (en son)
       startDelay: 3           // bu adimdan once bekleme (sn)
+    },
+    // Paket 72: "Spawner AFK" - Auto Farm gibi calisir ama komut yazmak yerine
+    // en yakin spawner'a doner, erisilebilir uzakliktaysa sag tiklar ve
+    // sunucunun actigi ekranda secili karelere tiklar. reach = vanilya blok
+    // etkilesim mesafesi (4.5); bazı sunucular daha genis erim verir.
+    spawner: {
+      enabled: false,
+      steps: [],
+      cycle: 60,              // tur arasi bekleme (sn)
+      closeAfter: true,       // tur bitince ekrani kapat
+      rawClick: false,        // tiklamayi dogrudan ham paket olarak gonder
+      reach: 4.5,             // spawner'a sag tik erisim mesafesi (blok)
+      startMode: 'join',
+      joinIndex: 0,
+      startDelay: 3
+    },
+    // Paket 76: En yakin sandigi acar, esyalari hizla envantere alip
+    // /sellall yollar; sabit veya rastgele aralikla tekrarlar.
+    autoSell: {
+      enabled: false,
+      mode: 'fixed',          // fixed | range
+      interval: 5,            // sabit aralik (sn)
+      minDelay: 5,            // rastgele en az (sn)
+      maxDelay: 10,           // rastgele en fazla (sn)
+      reach: 4.5              // vanilya sandik erisimi
     }
   },
   proxies: { selected: null, list: [] },
@@ -142,10 +177,16 @@ const DEFAULTS = {
 const FEATURE_KEYS = [
   'offline', 'sneak', 'physics', 'antiAfk', 'autoReconnect', 'joinMessages',
   'worldChangeMessages', 'proxy', 'fakeHost', 'noChatSign', 'vanillaLike',
-  'macroFarmer', 'autoSpam'
+  'macroFarmer', 'macroSpawner', 'macroAutoSell', 'autoSpam', 'spawnerProtect'
 ];
 // toggles[] icinde karsiligi olmayan (kendi bolumunde "enabled" tutan) ayarlar
-const FEATURE_SECTION = { macroFarmer: 'macros.farmer', autoSpam: 'autoSpam' };
+const FEATURE_SECTION = {
+  macroFarmer: 'macros.farmer',
+  macroSpawner: 'macros.spawner',
+  macroAutoSell: 'macros.autoSell',
+  autoSpam: 'autoSpam',
+  spawnerProtect: 'spawnerProtect'
+};
 
 function deepMerge(base, patch) {
   const out = Array.isArray(base) ? [...base] : { ...base };

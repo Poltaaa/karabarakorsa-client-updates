@@ -13,7 +13,10 @@ const fatal = (m) => window.report(m);
 function safe(fn, label) { try { return fn(); } catch (e) { fatal('[' + (label || 'init') + '] ' + e.message); } }
 
 let cfg = null;
-let state = { status: 'OFFLINE', ping: 0, uptime: 0, spam: false, antiAfk: false, server: '-', account: '-', lastError: '' };
+let state = {
+  status: 'OFFLINE', ping: 0, uptime: 0, spam: false, antiAfk: false,
+  autoSell: false, server: '-', account: '-', lastError: ''
+};
 const logFilters = new Set(['INFO', 'WARNING', 'ERROR', 'CHAT', 'CONNECT', 'DISCONNECT', 'RECONNECT']);
 
 /* ---------------- COKLU HESAP: numarali oturum sekmeleri ------------------ */
@@ -108,8 +111,11 @@ async function boot() {
   safe(fillToggles, 'fillToggles');
   safe(fillSpam, 'fillSpam');
   safe(fillAntiAfk, 'fillAntiAfk');
+  safe(fillSpawnerProtect, 'fillSpawnerProtect');
   safe(fillJoin, 'fillJoin');
   safe(fillMacros, 'fillMacros');
+  safe(fillSpawnerMacro, 'fillSpawnerMacro');
+  safe(fillAutoSell, 'fillAutoSell');
   safe(fillDialogSettings, 'fillDialogSettings');
   safe(fillSettings, 'fillSettings');
   safe(renderAccounts, 'renderAccounts');
@@ -898,15 +904,38 @@ function fillJoin() {
    ======================================================================== */
 const FEATURE_KEYS = ['offline', 'sneak', 'physics', 'antiAfk', 'autoReconnect',
   'joinMessages', 'worldChangeMessages', 'proxy', 'fakeHost', 'noChatSign',
-  'vanillaLike', 'macroFarmer', 'autoSpam'];
+  'vanillaLike', 'macroFarmer', 'macroSpawner', 'macroAutoSell', 'autoSpam', 'spawnerProtect'];
 const FEATURE_I18N = {
   offline: 'tOffline', sneak: 'tSneak', physics: 'tPhysics', antiAfk: 'antiAfk',
   autoReconnect: 'tAutoReconnect', joinMessages: 'tJoin',
   worldChangeMessages: 'tWorldChange', proxy: 'tProxy', fakeHost: 'fakeHost',
   noChatSign: 'tNoChatSign', vanillaLike: 'tVanilla', macroFarmer: 'macFarmer',
-  autoSpam: 'autoSpamTitle', startup: 'startWithWindows'
+  macroSpawner: 'tSpawnerAfk', macroAutoSell: 'autoSell',
+  autoSpam: 'autoSpamTitle', spawnerProtect: 'tSpawnerProtect', startup: 'startWithWindows'
 };
-const FEATURE_PAGE = { macroFarmer: 'macrosCaps', autoSpam: 'navSpam' };
+const FEATURE_PAGE = {
+  macroFarmer: 'macrosCaps',
+  macroSpawner: 'macrosCaps',
+  macroAutoSell: 'macrosCaps',
+  autoSpam: 'navSpam'
+};
+// Paket 77: Bu iki özellik deneme sürecinde. Arayüzde görünürler fakat hiçbir
+// açma yolu, hesap seçici veya ayar sayfası aktif değildir.
+const LOCKED_FEATURES = new Set(['macroSpawner', 'spawnerProtect']);
+const LOCKED_PAGES = new Set(['macrospawner', 'spawner']);
+function featureLocked(key) { return LOCKED_FEATURES.has(key); }
+function lockedFeatureToast() { window.toast(T('tFeatureTrial'), 'warn'); }
+
+// Dişliye veya kilitli satıra tıklamayı core.js sayfa geçişinden önce yakala.
+document.addEventListener('click', (e) => {
+  const go = e.target.closest && e.target.closest('[data-goto]');
+  const input = e.target.closest && e.target.closest('[data-feat]');
+  if ((go && LOCKED_PAGES.has(go.dataset.goto)) || (input && featureLocked(input.dataset.feat))) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    lockedFeatureToast();
+  }
+}, true);
 
 function featLabel(key) { return T(FEATURE_I18N[key] || key); }
 const PANEL_KEYS = FEATURE_KEYS;
@@ -930,6 +959,7 @@ function featList(key) {
 }
 // Ayar acik mi? Hesap secimi silinmeden kapatilabildigi icin ayri bayrak var.
 function featEnabled(key) {
+  if (featureLocked(key)) return false;
   const fe = (cfg && cfg.featureEnabled) || {};
   return fe[key] !== false && featList(key).length > 0;
 }
@@ -950,13 +980,16 @@ function applyFeatureUI() {
   const total = accIdList().length;
   document.querySelectorAll('[data-feat]').forEach((el) => {
     const key = el.dataset.feat;
+    const locked = featureLocked(key);
     const st = featState(key);
-    const n = featList(key).length;
+    const n = locked ? 0 : featList(key).length;
     el.checked = st !== 'off';
     el.classList.toggle('part', st === 'part');
+    el.setAttribute('aria-disabled', locked ? 'true' : 'false');
     const lab = el.closest('.check');
     if (!lab) return;
     lab.classList.toggle('part', st === 'part');
+    lab.classList.toggle('feature-locked', locked);
     let b = lab.querySelector('.featn');
     if (!b) {
       b = document.createElement('i');
@@ -977,6 +1010,10 @@ function bindFeatureSwitches(root) {
     el.dataset.featBound = '1';
     el.addEventListener('click', (e) => {
       e.preventDefault();
+      if (featureLocked(el.dataset.feat)) {
+        lockedFeatureToast();
+        return;
+      }
       // "Baglaninca otomatik baslat" da diger ayarlar gibi davranir:
       // checkbox'a her iki yonde de (acarken ve kapatirken) hesap secme
       // penceresi acilir. Kapatmak istedigin hesaplarin tikini kaldirirsin,
@@ -993,6 +1030,7 @@ function bindFeatureSwitches(root) {
 }
 
 async function saveFeature(key, ids, enabled) {
+  if (featureLocked(key)) return [];
   const valid = accIdList();
   const clean = [];
   (ids || []).forEach((id) => {
@@ -1014,13 +1052,30 @@ function afterFeatureChange(key) {
   try { refreshDashboard(); } catch (_) {}
   if (key === 'joinMessages') { try { renderMacroOrder(); renderMacroPlan(); } catch (_) {} }
   if (key === 'macroFarmer') { try { renderMacro(); } catch (_) {} }
+  if (key === 'macroSpawner') { try { renderMacroSpawner(); } catch (_) {} }
+  if (key === 'macroAutoSell') { try { renderAutoSell(); } catch (_) {} }
   if (key === 'autoSpam') { try { renderSpamProfiles(); } catch (_) {} }
+  // Paket 72: fizik toggle'i yalnizca "sonraki baglanti"ya degil, BAGLI bota da
+  // aninda uygulanir. Onceden kullanici acik/kapali yapiyor ama bot bir sonraki
+  // baglantida degisiyordu - "actim ama yine havada kaliyor" karisikliginin
+  // sebebi buydu. (api.bot.physics -> bot:physics -> setPhysics runtime)
+  if (key === 'physics') {
+    try {
+      const list = (cfg.featureAccounts && cfg.featureAccounts.physics) || [];
+      const enabled = (cfg.featureEnabled && cfg.featureEnabled.physics) !== false && list.length > 0;
+      window.api.bot.physics(enabled);
+    } catch (_) { /* yoksay */ }
+  }
 }
 
 /* --- hesap secme penceresi ------------------------------------------------ */
 let featPick = null;
 let spamAct = null;
 function openFeatPicker(key) {
+  if (featureLocked(key)) {
+    lockedFeatureToast();
+    return;
+  }
   if (!cfg) return;
   vpnPick = null;
   spamAct = null;
@@ -1174,7 +1229,7 @@ function dashTiles() {
 function renderDashTiles() {
   const box = $('dash-tiles'); if (!box) return;
   const keys = dashTiles();
-  box.innerHTML = keys.map((k) => `<label class="check dashtile" data-tip-key="${k}">
+  box.innerHTML = keys.map((k) => `<label class="check dashtile ${featureLocked(k) ? 'feature-locked' : ''}" data-tip-key="${k}">
       <input type="checkbox" data-featacc="${k}" />
       <span>${esc(featLabel(k))}</span>
       <button class="icon-btn dtx" data-dtx="${k}" title="${attr(T('remove'))}">×</button>
@@ -1204,6 +1259,11 @@ function paintDashTiles() {
   }
 }
 async function toggleFeatureForActive(key) {
+  if (featureLocked(key)) {
+    lockedFeatureToast();
+    paintDashTiles();
+    return;
+  }
   const acc = activeAccountId();
   // NOT: tarayici, preventDefault edilen bir kutuyu biz boyadiktan SONRA eski
   // haline dondurur. Bu yuzden bir sonraki karede tekrar boyuyoruz.
@@ -1393,6 +1453,8 @@ window.TIPS = {
     physics: 'Bot fiziği: yürüme, düşme, çarpışma hesaplanır. Kapatırsan bot hiç hareket etmez ve işlemci kullanımı biraz azalır.',
     antiAfk: 'Sunucunun "hareketsiz" diye atmasını engeller: belirli aralıklarla yürür, zıplar, sağa sola bakar. '
       + 'Ayrıntılı ayarlar yanındaki dişli tuşunda.',
+    spawnerProtect: 'Bu ayar şu an kapalıdır ve deneme süreci tamamlanana kadar kullanılamaz.',
+    macroSpawner: 'Spawner AFK şu an kapalıdır ve deneme süreci tamamlanana kadar kullanılamaz.',
     autoReconnect: 'Bağlantı koparsa kendiliğinden yeniden bağlanır. Bekleme süresi ve deneme sayısı yanındaki dişli tuşunda.',
     joinMessages: 'Oyuna girdikten sonra sırayla komut/mesaj gönderir (örnek: /login şifre). GİRİŞ KOMUTLARI sayfasından düzenlenir.',
     worldChangeMessages: 'Sunucu içinde dünya veya alt sunucu değişince (lobi -> spawn) giriş komutlarını tekrar gönderir.',
@@ -1435,6 +1497,8 @@ window.TIPS = {
     physics: 'Bot physics: walking, falling and collision are simulated. With it off the bot never moves and uses slightly less CPU.',
     antiAfk: 'Stops the server from kicking you for being idle: walks, jumps and looks around at intervals. '
       + 'Detailed options are behind the gear button next to it.',
+    spawnerProtect: 'This setting is currently unavailable until its testing period is complete.',
+    macroSpawner: 'Spawner AFK is currently unavailable until its testing period is complete.',
     autoReconnect: 'Reconnects by itself if the connection drops. Delay and attempt count are behind the gear button.',
     joinMessages: 'Sends commands/messages in order after joining (e.g. /login password). Edit them on the JOIN MESSAGES page.',
     worldChangeMessages: 'Re-sends the join commands when the world or sub-server changes (lobby -> spawn).',
@@ -2088,7 +2152,9 @@ function renderMacroStatus() {
   if (now) now.textContent = on && macroState.index >= 0 ? `${macroState.index + 1} / ${f.steps.length}` : '-';
   const cy = $('mf-cycles'); if (cy) cy.textContent = String(macroState.cycles || 0);
   const ck = $('mf-clicks'); if (ck) ck.textContent = String(macroState.clicks || 0);
-  ['mf-badge', 'mac-badge'].forEach((id) => { const b = $(id); if (b) b.classList.toggle('hidden', !on); });
+  const fb = $('mf-badge'); if (fb) fb.classList.toggle('hidden', !on);
+  const all = $('mac-badge');
+  if (all) all.classList.toggle('hidden', !(on || spawnerState.running || autoSellState.running));
   applyFeatureUI();
 }
 
@@ -2167,6 +2233,461 @@ async function stopMacro(silent) {
   if (!silent) window.toast(T('tMacStopped'), 'info');
 }
 
+/* ============================= AUTO SELL (Paket 76) ====================== */
+let autoSellState = { running: false, busy: false, cycles: 0, stacks: 0, items: 0, nextAt: 0 };
+
+function autoSellCfg() {
+  if (!cfg.macros) cfg.macros = {};
+  if (!cfg.macros.autoSell) {
+    cfg.macros.autoSell = {
+      enabled: false, mode: 'fixed', interval: 5, minDelay: 5, maxDelay: 10, reach: 4.5
+    };
+  }
+  return cfg.macros.autoSell;
+}
+
+function saveAutoSell(partial) {
+  const s = autoSellCfg();
+  Object.assign(s, partial || {});
+  s.mode = s.mode === 'range' ? 'range' : 'fixed';
+  s.interval = Math.max(1, Number(s.interval) || 5);
+  s.minDelay = Math.max(1, Number(s.minDelay) || 5);
+  s.maxDelay = Math.max(s.minDelay, Number(s.maxDelay) || 10);
+  return save({ macros: { autoSell: {
+    enabled: !!s.enabled,
+    mode: s.mode,
+    interval: s.interval,
+    minDelay: s.minDelay,
+    maxDelay: s.maxDelay,
+    reach: 4.5
+  } } });
+}
+
+function updateAutoSellMode(persist) {
+  const mode = $('as-mode').value === 'range' ? 'range' : 'fixed';
+  $('as-fixed-wrap').classList.toggle('hidden', mode === 'range');
+  $('as-range-wrap').classList.toggle('hidden', mode !== 'range');
+  if (cfg && persist !== false) saveAutoSell({ mode });
+}
+
+function renderAutoSell() {
+  const on = !!autoSellState.running;
+  const st = $('as-state'); if (st) st.textContent = on ? T('macRunning') : T('macStopped');
+  const dot = $('as-dot'); if (dot) dot.classList.toggle('on', on);
+  const badge = $('as-badge'); if (badge) badge.classList.toggle('hidden', !on);
+  const all = $('mac-badge');
+  if (all) all.classList.toggle('hidden', !(on || macroState.running || spawnerState.running));
+  const cy = $('as-cycles'); if (cy) cy.textContent = String(autoSellState.cycles || 0);
+  const stacks = $('as-stacks'); if (stacks) stacks.textContent = String(autoSellState.stacks || 0);
+  const items = $('as-items'); if (items) items.textContent = String(autoSellState.items || 0);
+  applyFeatureUI();
+}
+
+function fillAutoSell() {
+  const s = autoSellCfg();
+  const mode = $('as-mode');
+  if (mode) {
+    mode.value = s.mode === 'range' ? 'range' : 'fixed';
+    mode.onchange = () => updateAutoSellMode(true);
+  }
+  const interval = $('as-interval');
+  if (interval) {
+    interval.value = Math.max(1, Number(s.interval) || 5);
+    interval.onchange = () => saveAutoSell({ interval: Math.max(1, Number(interval.value) || 5) });
+  }
+  const min = $('as-min');
+  if (min) {
+    min.value = Math.max(1, Number(s.minDelay) || 5);
+    min.onchange = () => saveAutoSell({ minDelay: Math.max(1, Number(min.value) || 5) });
+  }
+  const max = $('as-max');
+  if (max) {
+    max.value = Math.max(1, Number(s.maxDelay) || 10);
+    max.onchange = () => saveAutoSell({ maxDelay: Math.max(1, Number(max.value) || 10) });
+  }
+  const run = $('as-run'); if (run) run.onclick = () => startAutoSell(false);
+  const stop = $('as-stop'); if (stop) stop.onclick = () => stopAutoSell(false);
+  updateAutoSellMode(false);
+  renderAutoSell();
+}
+
+async function startAutoSell(silent) {
+  const acc = activeAccountId();
+  if (acc && featList('macroAutoSell').indexOf(acc) === -1) {
+    await saveFeature('macroAutoSell', featList('macroAutoSell').concat([acc]));
+  }
+  // saveFeature bağlı botun config'ini anında günceller ve Auto Sell'i zaten
+  // başlatır. İkinci kez start çağırıp aynı anda iki ilk tur oluşturma.
+  let live = null;
+  try { live = await bridge.bot.state(effChatSlot()); } catch (_) {}
+  const r = live && live.autoSell ? { ok: true } : await bridge.bot.autoSellStart(effChatSlot());
+  if (r && r.ok) {
+    autoSellState.running = true;
+    renderAutoSell();
+    if (!silent) window.toast(T('tAutoSellStarted'), 'ok');
+  } else {
+    window.toast((r && r.error) === 'no_session' ? T('tConnectFirst') : ((r && r.error) || T('tConnectFirst')), 'warn');
+  }
+}
+
+async function stopAutoSell(silent) {
+  const acc = activeAccountId();
+  const cur = featList('macroAutoSell');
+  if (acc && cur.indexOf(acc) !== -1) await saveFeature('macroAutoSell', cur.filter((x) => x !== acc));
+  else if (cur.length) await saveFeature('macroAutoSell', []);
+  await bridge.bot.autoSellStop(effChatSlot());
+  autoSellState.running = false;
+  autoSellState.busy = false;
+  autoSellState.nextAt = 0;
+  renderAutoSell();
+  if (!silent) window.toast(T('tAutoSellStopped'), 'info');
+}
+
+/* ========================= SPAWNER AFK (Paket 72) ========================= */
+/* Auto Farm'un spawner'li varyanti: komut yok. Bot yurumez; en yakin
+   spawner'a doner, erisim mesafesi icindeyse sag tiklar, sunucunun actigi
+   ekranda secili karelere SIRAYLA tiklar. Ayarlar Auto Farm ile aynidir. */
+let spawnerState = { running: false, index: -1, cycles: 0, total: 0, clicks: 0 };
+let spawnerPeek = null;          // son okunan ekranin esyalari (canli okuma)
+
+function spawnerCfg() {
+  if (!cfg.macros) cfg.macros = {};
+  if (!cfg.macros.spawner) cfg.macros.spawner = { enabled: false, steps: [], cycle: 60, closeAfter: true, rawClick: false, reach: 4.5, startMode: 'join', joinIndex: 0, startDelay: 3 };
+  if (!Array.isArray(cfg.macros.spawner.steps)) cfg.macros.spawner.steps = [];
+  return cfg.macros.spawner;
+}
+function saveSpawner(partial) {
+  const s = spawnerCfg();
+  Object.assign(s, partial || {});
+  return save({ macros: { spawner: {
+    steps: s.steps, cycle: s.cycle, enabled: s.enabled,
+    closeAfter: s.closeAfter, rawClick: !!s.rawClick,
+    reach: Math.min(8, Math.max(1, Number(s.reach) || 4.5)),
+    startMode: s.startMode === 'delay' ? 'delay' : 'join',
+    joinIndex: Math.max(0, Number(s.joinIndex) || 0),
+    startDelay: Math.max(0, Number(s.startDelay) === 0 ? 0 : (Number(s.startDelay) || 3))
+  } } });
+}
+
+// Canli ekran okuma (AUTO LIVE): slota tiklayinca yeni ekran acilirsa
+// arayuz ANINDA o yeni ekrani gosterir.
+let spawnerScreenTimer = null;
+let spawnerScreenBusy = false;
+let spawnerScreenSignature = '';
+
+async function refreshSpawnerScreenAuto() {
+  const page = $('page-macrospawner');
+  if (!page || !page.classList.contains('active') || spawnerScreenBusy) return;
+  spawnerScreenBusy = true;
+  try {
+    const r = await bridge.bot.macroPeek(effChatSlot(), true);
+    const next = r && r.ok ? r : null;
+    const sig = next ? JSON.stringify([next.title, next.size, next.items]) : '';
+    if (sig !== spawnerScreenSignature) {
+      spawnerScreenSignature = sig;
+      spawnerPeek = next;
+      renderMacroSpawner();
+    }
+  } catch (_) {
+    if (spawnerScreenSignature) {
+      spawnerScreenSignature = '';
+      spawnerPeek = null;
+      renderMacroSpawner();
+    }
+  } finally {
+    spawnerScreenBusy = false;
+  }
+}
+function startSpawnerScreenAuto() {
+  if (spawnerScreenTimer) clearInterval(spawnerScreenTimer);
+  spawnerScreenSignature = '';
+  refreshSpawnerScreenAuto();
+  spawnerScreenTimer = setInterval(refreshSpawnerScreenAuto, 1200);
+}
+function stopSpawnerScreenAuto() {
+  if (spawnerScreenTimer) clearInterval(spawnerScreenTimer);
+  spawnerScreenTimer = null;
+  spawnerScreenBusy = false;
+}
+
+// 54 kareyi bir kez olusturur (Auto Farm'daki gibi)
+function buildChestSpawner() {
+  const g = $('ms-grid');
+  if (!g || g.childElementCount) return;
+  let html = '';
+  for (let i = 0; i < MACRO_COLS * MACRO_ROWS; i++) {
+    html += `<button type="button" class="mcslot" data-sslot="${i}"><span class="ordwrap"></span><span class="idx">${i}</span></button>`;
+  }
+  g.innerHTML = html;
+  g.querySelectorAll('[data-sslot]').forEach((b) => {
+    b.onclick = () => addSpawnerStep(Number(b.dataset.sslot));
+  });
+  iconSetup();
+  g.addEventListener('mousemove', (e) => {
+    const b = e.target.closest ? e.target.closest('.mcslot') : null;
+    if (!b) { hideItemTip(); return; }
+    showItemTip(b, e);
+  });
+  g.addEventListener('mouseleave', hideItemTip);
+  g.addEventListener('click', hideItemTip);
+}
+
+function addSpawnerStep(slot) {
+  const s = spawnerCfg();
+  const first = !s.steps.length;
+  s.steps.push({ slot, delay: first ? 1.5 : 1, click: 'left' });
+  const outside = spawnerPeek && spawnerPeek.size && slot >= spawnerPeek.size;
+  saveSpawner({ steps: s.steps }).then(() => {
+    renderMacroSpawner();
+    if (outside) window.toast(T('tMacVoid'), 'warn');
+    else window.toast(T('tMacStepAdded') + ' · ' + T('macStepSlot') + ' #' + slot, 'ok');
+  });
+}
+
+// SOL -> SAG -> SHIFT+SOL -> SHIFT+SAG -> SOL ...
+function cycleSpawnerClick(i) {
+  const s = spawnerCfg();
+  const st = s.steps[i];
+  if (!st) return;
+  st.click = CLICK_KEYS[(CLICK_KEYS.indexOf(clickKey(st)) + 1) % CLICK_KEYS.length];
+  saveSpawner({ steps: s.steps }).then(() => {
+    renderMacroSpawner();
+    window.toast(T('macClickType') + ': ' + T(CLICK_LBL[st.click]), 'info');
+  });
+}
+function removeSpawnerStep(i) {
+  const s = spawnerCfg();
+  s.steps.splice(i, 1);
+  saveSpawner({ steps: s.steps }).then(renderMacroSpawner);
+}
+function moveSpawnerStep(i, dir) {
+  const s = spawnerCfg();
+  const j = i + dir;
+  if (j < 0 || j >= s.steps.length) return;
+  const tmp = s.steps[i]; s.steps[i] = s.steps[j]; s.steps[j] = tmp;
+  saveSpawner({ steps: s.steps }).then(renderMacroSpawner);
+}
+
+// Sandik karelerini ve adim listesini cizer (Auto Farm renderMacro ile ayni)
+function renderMacroSpawner() {
+  if (!$('ms-grid')) return;
+  buildChestSpawner();
+  const s = spawnerCfg();
+
+  const used = {};
+  s.steps.forEach((st, i) => {
+    const k = Number(st.slot);
+    (used[k] = used[k] || []).push(i + 1);
+  });
+  $('ms-grid').querySelectorAll('[data-sslot]').forEach((b) => {
+    const n = Number(b.dataset.sslot);
+    const orders = used[n];
+    const live = spawnerState.running && spawnerState.index >= 0
+      && s.steps[spawnerState.index] && Number(s.steps[spawnerState.index].slot) === n;
+    b.classList.toggle('on', !!orders);
+    b.classList.toggle('live', !!live);
+    const it = spawnerPeek && spawnerPeek.items ? spawnerPeek.items.find((x) => Number(x.slot) === n) : null;
+    const void_ = !!(spawnerPeek && spawnerPeek.size && n >= spawnerPeek.size);
+    const nm = it ? (mcText(it.name) || it.id || '?') : '';
+    const pos = it ? iconStyle(it.id) : '';
+    let inner = '';
+    if (pos) inner += `<i class="ic" style="${pos}"></i>`;
+    else if (it) inner += `<span class="it">${esc(nm)}</span>`;
+    inner += `<span class="idx">${n}</span>`;
+    if (it && Number(it.count) > 1) inner += `<span class="cnt">${Number(it.count)}</span>`;
+    if (orders) {
+      const head = orders[0];
+      const rest = orders.length - 1;
+      inner += `<span class="ordwrap"><i class="ord">${head}</i>${rest ? `<i class="ord more">+${rest}</i>` : ''}</span>`;
+    }
+    b.innerHTML = inner;
+    b.classList.toggle('has', !!it);
+    b.classList.toggle('img', !!pos);
+    b.classList.toggle('void', void_ && !orders);
+    b.dataset.nm = nm;
+    b.dataset.sub = '#' + n + (it && Number(it.count) > 1 ? ' · x' + Number(it.count) : '')
+      + (orders ? ' · ' + T('macStepNow') + ' ' + orders.join(', ') : '')
+      + (void_ ? ' · ' + T('macVoid') : '');
+    b.removeAttribute('title');
+  });
+
+  const box = $('ms-steps');
+  if (box) {
+    box.innerHTML = s.steps.map((st, i) => {
+      const slot = Number(st.slot);
+      const r = Math.floor(slot / MACRO_COLS) + 1;
+      const c = (slot % MACRO_COLS) + 1;
+      const live = spawnerState.running && spawnerState.index === i;
+      const ck = clickKey(st);
+      return `<div class="step${live ? ' live' : ''}">
+        <i class="no">${i + 1}</i>
+        <div class="txt"><b>${T('macStepSlot')} #${slot}</b><small>${T('macStepRowCol').replace('{r}', r).replace('{c}', c)}</small></div>
+        <button type="button" class="ctype${ck === 'left' ? '' : ' alt'}" data-ssclick="${i}" title="${T('macClickType')}">${T(CLICK_LBL[ck])}</button>
+        <label class="dly"><input type="number" data-ssdly="${i}" min="0" step="0.5" value="${st.delay}" title="${T('macStepDelay')}" /><span>${T('secShort')}</span></label>
+        <div class="acts">
+          <button class="icon-btn" data-ssup="${i}" title="${T('macUp')}">${window.ICON.up}</button>
+          <button class="icon-btn" data-ssdown="${i}" title="${T('macDown')}">${window.ICON.down}</button>
+          <button class="icon-btn del" data-ssdel="${i}" title="${T('macRemove')}">${window.ICON.trash}</button>
+        </div>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('[data-ssdly]').forEach((el) => {
+      el.onchange = () => {
+        const i = Number(el.dataset.ssdly);
+        spawnerCfg().steps[i].delay = Math.max(0, Number(el.value) || 0);
+        saveSpawner({ steps: spawnerCfg().steps });
+      };
+    });
+    box.querySelectorAll('[data-ssclick]').forEach((b2) => { b2.onclick = () => cycleSpawnerClick(Number(b2.dataset.ssclick)); });
+    box.querySelectorAll('[data-ssdel]').forEach((b2) => { b2.onclick = () => removeSpawnerStep(Number(b2.dataset.ssdel)); });
+    box.querySelectorAll('[data-ssup]').forEach((b2) => { b2.onclick = () => moveSpawnerStep(Number(b2.dataset.ssup), -1); });
+    box.querySelectorAll('[data-ssdown]').forEach((b2) => { b2.onclick = () => moveSpawnerStep(Number(b2.dataset.ssdown), 1); });
+  }
+
+  const ct = $('ms-chest-title');
+  if (ct) ct.textContent = (spawnerPeek && mcText(spawnerPeek.title)) || 'SPAWNER';
+
+  const has = s.steps.length > 0;
+  const panel = $('ms-panel'); if (panel) panel.classList.toggle('open', has);
+  const empty = $('ms-empty'); if (empty) empty.classList.toggle('hidden', has);
+  try { window.enhanceNumbers($('ms-steps')); } catch (_) {}
+  renderSpawnerOrder();
+  renderSpawnerPlan();
+  renderSpawnerStatus();
+}
+
+// --- GIRIS KOMUTLARI ile senkron baslatma (Auto Farm plan gorunumu) ---------
+function spawnerPlan() {
+  const s = spawnerCfg();
+  const on = !!(cfg.toggles && cfg.toggles.joinMessages);
+  const list = (on ? joinCmdList() : []).map((c) => ({
+    txt: String(c.command).replace(MASK_CMD, '$1********'),
+    delay: Math.max(0, Number(c.delay) || 0),
+    me: false
+  }));
+  if (s.startMode !== 'delay') {
+    let at = Number(s.joinIndex) || 0;
+    if (!at || at > list.length + 1) at = list.length + 1;
+    list.splice(at - 1, 0, {
+      txt: T('tSpawnerAfk'),
+      delay: Math.max(0, Number(s.startDelay) === 0 ? 0 : (Number(s.startDelay) || 3)),
+      me: true
+    });
+  }
+  return list;
+}
+function renderSpawnerOrder() {
+  const sel = $('ms-order');
+  if (!sel) return;
+  const s = spawnerCfg();
+  const n = joinCmdList().length;
+  let html = `<option value="0">${T('macStartOrderLast')}</option>`;
+  for (let k = 1; k <= n + 1; k++) html += `<option value="${k}">${T('macStartOrderNth').replace('{n}', k)}</option>`;
+  html += `<option value="free">${T('macStartOrderFree')}</option>`;
+  sel.innerHTML = html;
+  sel.value = s.startMode === 'delay' ? 'free' : String(Math.min(Math.max(0, Number(s.joinIndex) || 0), n + 1));
+  try { window.refreshSelect(sel); } catch (_) {}
+}
+function renderSpawnerPlan() {
+  const box = $('ms-plan');
+  if (!box) return;
+  const list = spawnerPlan();
+  box.innerHTML = `<div class="joinplan-head">${T('macPlanHead')}</div>` + (list.length
+    ? list.map((x, i) => `<div class="jp${x.me ? ' me' : ''}"><i>${i + 1}</i><b>${esc(x.txt)}</b><span>+${x.delay} ${T('secShort')}</span></div>`).join('')
+    : `<p class="hint">${T('macPlanNone')}</p>`);
+  const sd = $('ms-sdelay');
+  if (sd) sd.value = Math.max(0, Number(spawnerCfg().startDelay) === 0 ? 0 : (Number(spawnerCfg().startDelay) || 3));
+}
+
+function renderSpawnerStatus() {
+  const s = spawnerCfg();
+  const on = spawnerState.running;
+  const st = $('ms-state'); if (st) st.textContent = on ? T('macRunning') : T('macStopped');
+  const dot = $('ms-dot'); if (dot) dot.classList.toggle('on', on);
+  const now = $('ms-step-now');
+  if (now) now.textContent = on && spawnerState.index >= 0 ? `${spawnerState.index + 1} / ${s.steps.length}` : '-';
+  const cy = $('ms-cycles'); if (cy) cy.textContent = String(spawnerState.cycles || 0);
+  const ck = $('ms-clicks'); if (ck) ck.textContent = String(spawnerState.clicks || 0);
+  const mb = $('ms-badge'); if (mb) mb.classList.toggle('hidden', !on);
+  // MAKROLAR sayfasindaki RUNNING rozeti: iki makrodan biri calisiyorsa yanar
+  const mac = $('mac-badge');
+  if (mac) mac.classList.toggle('hidden', !(on || macroState.running || autoSellState.running));
+  applyFeatureUI();
+}
+
+function fillSpawnerMacro() {
+  const s = spawnerCfg();
+  const cyc = $('ms-cycle');
+  if (cyc) {
+    cyc.value = s.cycle || 60;
+    cyc.onchange = () => saveSpawner({ cycle: Math.max(3, Number(cyc.value) || 60) });
+  }
+  const cls = $('ms-close');
+  if (cls) {
+    cls.checked = s.closeAfter !== false;
+    cls.onchange = () => saveSpawner({ closeAfter: cls.checked });
+  }
+  const raw = $('ms-raw');
+  if (raw) {
+    raw.checked = !!s.rawClick;
+    raw.onchange = () => saveSpawner({ rawClick: raw.checked });
+  }
+  const reach = $('ms-reach');
+  if (reach) {
+    reach.value = Math.min(8, Math.max(1, Number(s.reach) || 4.5));
+    reach.onchange = () => saveSpawner({ reach: Math.min(8, Math.max(1, Number(reach.value) || 4.5)) });
+  }
+  const ord = $('ms-order');
+  if (ord) {
+    ord.onchange = () => {
+      const v = ord.value;
+      if (v === 'free') saveSpawner({ startMode: 'delay' }).then(renderSpawnerPlan);
+      else saveSpawner({ startMode: 'join', joinIndex: Math.max(0, Number(v) || 0) }).then(renderSpawnerPlan);
+    };
+  }
+  const sdl = $('ms-sdelay');
+  if (sdl) {
+    sdl.value = Math.max(0, Number(s.startDelay) === 0 ? 0 : (Number(s.startDelay) || 3));
+    sdl.onchange = () => saveSpawner({ startDelay: Math.max(0, Number(sdl.value) || 0) }).then(renderSpawnerPlan);
+  }
+  applyFeatureUI();
+  const clear = $('ms-clear');
+  if (clear) clear.onclick = () => { const ss = spawnerCfg(); ss.steps = []; saveSpawner({ steps: [] }).then(() => { renderMacroSpawner(); window.toast(T('tMacCleared'), 'info'); }); };
+  const run = $('ms-run'); if (run) run.onclick = () => startSpawner(false);
+  const stop = $('ms-stop'); if (stop) stop.onclick = () => stopSpawner(false);
+  renderMacroSpawner();
+}
+
+// CALISTIR = anahtari ac + hemen basla  (kapatana kadar calisir)
+async function startSpawner(silent) {
+  const s = spawnerCfg();
+  // CALISTIR = o anki hesabi makro listesine ekler (anahtar da acilir)
+  const acc = activeAccountId();
+  if (acc && featList('macroSpawner').indexOf(acc) === -1) {
+    await saveFeature('macroSpawner', featList('macroSpawner').concat([acc]));
+  }
+  const r = await bridge.bot.spawnerStart(effChatSlot());
+  if (r && r.ok) {
+    spawnerState.running = true;
+    renderMacroSpawner();
+    if (!silent) window.toast(T('tSpawnerStarted'), 'ok');
+  } else if (r && r.error) {
+    window.toast(r.error === 'no_session' ? T('tConnectFirst') : r.error, 'warn');
+  }
+}
+// DURDUR = anahtari kapat + durdur (yoksa denetci tekrar baslatirdi)
+async function stopSpawner(silent) {
+  // DURDUR = o hesabi listeden cikar (yoksa denetci tekrar baslatirdi)
+  const acc = activeAccountId();
+  const cur = featList('macroSpawner');
+  if (acc && cur.indexOf(acc) !== -1) await saveFeature('macroSpawner', cur.filter((x) => x !== acc));
+  else if (cur.length) await saveFeature('macroSpawner', []);
+  await bridge.bot.spawnerStop(effChatSlot());
+  spawnerState = { running: false, index: -1, cycles: spawnerState.cycles, total: spawnerState.total, clicks: spawnerState.clicks };
+  renderMacroSpawner();
+  if (!silent) window.toast(T('tSpawnerStopped'), 'info');
+}
+
 function fillAntiAfk() {
   const a = cfg.antiAfk;
   const map = { 'afk-random': 'randomMovement', 'afk-walk': 'walk', 'afk-jump': 'jump', 'afk-sneak': 'sneak', 'afk-rotate': 'rotate', 'afk-look': 'lookAround' };
@@ -2179,6 +2700,96 @@ function fillAntiAfk() {
   $('afk-min').value = a.minInterval; $('afk-max').value = a.maxInterval;
   $('afk-min').onchange = () => save({ antiAfk: { minInterval: Number($('afk-min').value) } });
   $('afk-max').onchange = () => save({ antiAfk: { maxInterval: Number($('afk-max').value) } });
+}
+
+function paintSliderFill(el) {
+  if (!el) return;
+  const host = (el.closest && el.closest('.slider')) || el;
+  const min = Number(el.min) || 0;
+  const max = Number(el.max) || 100;
+  const pct = ((Number(el.value) - min) / (max - min)) * 100;
+  host.style.setProperty('--fill', Math.max(0, Math.min(100, pct)) + '%');
+}
+
+function fillSpawnerProtect() {
+  const s = (cfg && cfg.spawnerProtect) || {};
+  const clamp = (v, lo, hi, dflt) => {
+    const n = Number(v);
+    return Math.min(hi, Math.max(lo, Number.isFinite(n) ? n : dflt));
+  };
+  // Mesafe kaydiricisi (slider 1-50)
+  const trg = $('sp-trigger');
+  const trgVal = $('sp-trigger-val');
+  if (trg) {
+    const v = clamp(s.triggerRadius, 1, 50, 50);
+    trg.value = v;
+    if (trgVal) trgVal.textContent = v;
+    paintSliderFill(trg);
+    trg.oninput = () => {
+      if (trgVal) trgVal.textContent = clamp(trg.value, 1, 50, 50);
+      paintSliderFill(trg);
+    };
+    trg.onchange = () => {
+      const v = clamp(trg.value, 1, 50, 50);
+      trg.value = v;
+      if (trgVal) trgVal.textContent = v;
+      paintSliderFill(trg);
+      save({ spawnerProtect: { triggerRadius: v } });
+    };
+  }
+  // Paket 77: spawnerlar bitince oyundan cik
+  const exitChk = $('sp-exit');
+  if (exitChk) {
+    exitChk.checked = !!s.exitAfterBreak;
+    exitChk.onchange = () => save({ spawnerProtect: { exitAfterBreak: exitChk.checked } });
+  }
+  renderTrustedList();
+  applyFeatureUI();
+}
+
+// Guvenilir kisiler: isim listesi (config.spawnerProtect.trusted)
+function spTrustedArr() {
+  return ((cfg && cfg.spawnerProtect && cfg.spawnerProtect.trusted) || []).slice();
+}
+function renderTrustedList() {
+  const box = $('sp-trusted-list');
+  const input = $('sp-trusted-input');
+  if (!box) return;
+  const arr = spTrustedArr();
+  box.innerHTML = '';
+  arr.forEach((name, i) => {
+    const row = document.createElement('div');
+    row.className = 'item';
+    row.innerHTML = `<div class="main"><div class="name">${esc(name)}</div></div>`;
+    const del = document.createElement('button');
+    del.className = 'btn tiny ghost';
+    del.title = T('spawnerTrustedRemove');
+    del.textContent = '×';
+    del.onclick = () => {
+      const next = arr.filter((_, j) => j !== i);
+      // Paket 77: kaydettikten SONRA liste aninda yeniden cizilir
+      save({ spawnerProtect: { trusted: next } }).then(() => {
+        renderTrustedList();
+        if (input) input.focus();
+      });
+    };
+    row.appendChild(del);
+    box.appendChild(row);
+  });
+  const doAdd = () => {
+    if (!input) return;
+    const name = (input.value || '').trim();
+    if (!name) return;
+    const cur = spTrustedArr();
+    if (cur.indexOf(name) === -1) cur.push(name);
+    // Paket 77: kaydettikten SONRA liste aninda yeniden cizilir
+    save({ spawnerProtect: { trusted: cur } }).then(() => {
+      renderTrustedList();
+      if (input) input.focus();
+    });
+    input.value = '';
+  };
+  if (input) input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); doAdd(); } };
 }
 
 /* ================================ LOGS ==================================== */
@@ -2280,6 +2891,20 @@ async function installUpdateNow() {
 /* ============================ STATE / IPC ================================= */
 function applyState(s) {
   state = Object.assign({}, state, s);
+  if (s.autoSellState) {
+    autoSellState = {
+      running: !!s.autoSellState.running,
+      busy: !!s.autoSellState.busy,
+      cycles: Number(s.autoSellState.cycles) || 0,
+      stacks: Number(s.autoSellState.stacks) || 0,
+      items: Number(s.autoSellState.items) || 0,
+      nextAt: Number(s.autoSellState.nextAt) || 0
+    };
+    renderAutoSell();
+  } else if (s.autoSell !== undefined) {
+    autoSellState.running = !!s.autoSell;
+    renderAutoSell();
+  }
   if (s.status === 'ONLINE') state.uptime = s.uptime || state.uptime || 0;
   else state.uptime = 0;
   const online = s.status === 'ONLINE';
@@ -2291,7 +2916,7 @@ function applyState(s) {
   const sdot = $('stat-dot'); if (sdot) sdot.classList.toggle('on', online);
   $('sb-ping').textContent = online ? s.ping + ' ms' : '-';
   $('spam-badge').classList.toggle('hidden', !s.spam);
-  $('q-spam').textContent = s.spam ? T('qSpamStop') : T('qSpamStart');
+  const qs = $('q-spam'); if (qs) qs.textContent = s.spam ? T('qSpamStop') : T('qSpamStart');
   $('c-connect').disabled = s.status === 'CONNECTING';
   refreshDashboard();
   if ($('page-screen') && $('page-screen').classList.contains('active')) refreshLiveScreen();
@@ -2391,7 +3016,7 @@ function refreshDashboard() {
     const cur = (slotInfo.list || []).find((x) => x.slot === effChatSlot());
     note.textContent = cur ? ('#' + cur.slot + ' ' + (cur.name || '')) : '-';
   }
-  $('q-spam').textContent = state.spam ? T('qSpamStop') : T('qSpamStart');
+  const qs = $('q-spam'); if (qs) qs.textContent = state.spam ? T('qSpamStop') : T('qSpamStart');
   paintDashTiles();
 }
 
@@ -2471,7 +3096,14 @@ window.addEventListener('page-change', (e) => {
   if (pg === 'macrofarmer' || pg === 'macros') {
     try { renderMacroOrder(); renderMacroPlan(); } catch (_) {}
   }
+  if (pg === 'macrospawner' || pg === 'macros') {
+    try { renderSpawnerOrder(); renderSpawnerPlan(); } catch (_) {}
+  }
+  if (pg === 'macroautosell' || pg === 'macros') {
+    try { renderAutoSell(); } catch (_) {}
+  }
   if (pg === 'macrofarmer') startMacroScreenAuto(); else stopMacroScreenAuto();
+  if (pg === 'macrospawner') startSpawnerScreenAuto(); else stopSpawnerScreenAuto();
   if (pg === 'screen') startLiveScreen(); else stopLiveScreen();
   // AYARLAR sayfasindan cikip geri gelince acik panelleri kapat
   ['s-info-panel'].forEach((id) => {
@@ -2505,9 +3137,11 @@ bridge.on('screen-open', (d) => {
   const slot = Number(d && d.slot) || 0;
   const page = $('page-screen');
   const macroPage = $('page-macrofarmer');
+  const spawnerPage = $('page-macrospawner');
   const viewingScreen = !!(page && page.classList.contains('active') && slot === effChatSlot());
   const viewingMacro = !!(macroPage && macroPage.classList.contains('active') && slot === effChatSlot());
-  const viewing = viewingScreen || viewingMacro;
+  const viewingSpawner = !!(spawnerPage && spawnerPage.classList.contains('active') && slot === effChatSlot());
+  const viewing = viewingScreen || viewingMacro || viewingSpawner;
   if (viewing) {
     clearCurrentScreenAlert();
     if (viewingScreen) {
@@ -2517,6 +3151,10 @@ bridge.on('screen-open', (d) => {
     if (viewingMacro) {
       setTimeout(refreshMacroScreenAuto, 80);
       setTimeout(refreshMacroScreenAuto, 350);
+    }
+    if (viewingSpawner) {
+      setTimeout(refreshSpawnerScreenAuto, 80);
+      setTimeout(refreshSpawnerScreenAuto, 350);
     }
   } else {
     screenUnreadSlots.add(slot);
@@ -2533,6 +3171,9 @@ bridge.on('screen-close', (d) => {
   if ($('page-macrofarmer') && $('page-macrofarmer').classList.contains('active') && slot === effChatSlot()) {
     setTimeout(refreshMacroScreenAuto, 80);
   }
+  if ($('page-macrospawner') && $('page-macrospawner').classList.contains('active') && slot === effChatSlot()) {
+    setTimeout(refreshSpawnerScreenAuto, 80);
+  }
 });
 bridge.on('macro-state', (d) => {
   if (!d) return;
@@ -2545,6 +3186,33 @@ bridge.on('macro-state', (d) => {
     clicks: Number(d.clicks) || 0
   };
   renderMacro();
+});
+// Paket 72: Spawner AFK durumu (ayri sayfa+rozet)
+bridge.on('spawner-state', (d) => {
+  if (!d) return;
+  if (d.slot && d.slot !== effChatSlot()) return;           // baska hesabin makrosu
+  spawnerState = {
+    running: !!d.running,
+    index: Number.isInteger(d.index) ? d.index : -1,
+    total: Number(d.total) || 0,
+    cycles: Number(d.cycles) || spawnerState.cycles || 0,
+    clicks: Number(d.clicks) || 0
+  };
+  renderMacroSpawner();
+});
+bridge.on('autosell-state', (d) => {
+  if (!d) return;
+  if (d.slot && d.slot !== effChatSlot()) return;
+  autoSellState = {
+    running: !!d.running,
+    busy: !!d.busy,
+    cycles: Number(d.cycles) || 0,
+    stacks: Number(d.stacks) || 0,
+    items: Number(d.items) || 0,
+    nextAt: Number(d.nextAt) || 0
+  };
+  state.autoSell = autoSellState.running;
+  renderAutoSell();
 });
 bridge.on('metrics', (m) => {
   const c = $('sb-cpu'); if (c) c.textContent = m.cpu + '%';
@@ -2619,6 +3287,103 @@ async function doMicrosoftLogin() {
   }
 }
 
+/* ======================= ENVANTER (PANEL) ================================= */
+// Secili hesabin envanteri: Q = 1 dusur, Ctrl+Q = yiginin tamamini dusur.
+let invOpen = false;
+let invSlot = null;     // aktif oturum numarasi
+let invSel = null;      // secili penceredeki slot (window slot)
+
+function openInventory() {
+  const slot = effChatSlot();
+  if (slot === null || slot === undefined || slot === 0) {
+    window.toast(T('invNoAccount'), 'warn');
+    return;
+  }
+  invSlot = slot;
+  invSel = null;
+  invOpen = true;
+  const m = $('inv-modal');
+  if (!m) return;
+  m.classList.remove('hidden');
+  const who = $('dash-quick-who');
+  const sub = $('inv-sub');
+  if (sub) sub.textContent = '#' + slot + (who && who.textContent !== '-' ? ' · ' + who.textContent : '');
+  refreshInventory();
+}
+function closeInventory() {
+  invOpen = false;
+  invSel = null;
+  const m = $('inv-modal');
+  if (m) m.classList.add('hidden');
+  const st = $('inv-status');
+  if (st) st.textContent = '';
+}
+async function refreshInventory() {
+  const box = $('inv-modal');
+  if (!box || box.classList.contains('hidden') || !invOpen) return;
+  const status = $('inv-status');
+  if (status) status.textContent = T('invLoading');
+  let r;
+  try { r = await bridge.bot.inventoryGet(invSlot); } catch (e) { r = { ok: false, error: (e && e.message) || String(e) }; }
+  if (!r || !r.ok) {
+    if (status) status.textContent = invErr(r);
+    return;
+  }
+  renderInventoryGrid(r.slots || []);
+  if (status) status.textContent = r.windowOpen ? T('invWindowOpen') : '';
+}
+function renderInventoryGrid(slots) {
+  const zones = { armor: $('inv-armor'), main: $('inv-main'), hotbar: $('inv-hotbar'), offhand: $('inv-offhand') };
+  Object.values(zones).forEach((el) => { if (el) el.innerHTML = ''; });
+  for (const s of slots || []) {
+    const host = zones[s.zone];
+    if (!host) continue;
+    const cell = document.createElement('button');
+    cell.type = 'button';
+    cell.className = 'mcslot invcell' + (invSel === s.slot ? ' on' : '') + (s.empty ? '' : ' has');
+    cell.dataset.slot = String(s.slot);
+    cell.title = s.empty ? '' : (T('invTip') + ' ' + (s.displayName || s.name) + (s.count > 1 ? ' ×' + s.count : ''));
+    if (!s.empty && (s.name || s.displayName)) {
+      const ic = document.createElement('i');
+      ic.className = 'ic';
+      ic.style.cssText = iconStyle(s.name);
+      cell.appendChild(ic);
+      if (s.count > 1) {
+        const cnt = document.createElement('b');
+        cnt.className = 'cnt';
+        cnt.textContent = s.count;
+        cell.appendChild(cnt);
+      }
+    }
+    cell.onclick = () => { invSel = s.slot; selectInvCell(cell); };
+    host.appendChild(cell);
+  }
+}
+function selectInvCell(el) {
+  document.querySelectorAll('#inv-modal .invcell').forEach((c) => c.classList.toggle('on', c === el));
+}
+async function invAct(action) {
+  if (!invOpen || invSlot === null) return;
+  if (invSel === null) {
+    const st = $('inv-status');
+    if (st) st.textContent = T('invPickFirst');
+    return;
+  }
+  const st = $('inv-status');
+  if (st) st.textContent = T('invBusy');
+  let r;
+  try { r = await bridge.bot.inventoryDrop(invSlot, invSel, action); } catch (e) { r = { ok: false, error: (e && e.message) || String(e) }; }
+  if (st) st.textContent = (!r || !r.ok) ? invErr(r) : '';
+  await refreshInventory();
+}
+function invErr(r) {
+  const e = (r && r.error) || '?';
+  if (e === 'empty') return T('invEmpty');
+  if (e === 'window_open') return T('invWindowOpen');
+  if (e === 'no_bot' || e === 'no_session') return T('invNoBot');
+  return T('invFail') + ' ' + e;
+}
+
 /* ======================= TUM BUTON BAGLANTILARI =========================== */
 function bindStatic() {
   // Connect
@@ -2627,16 +3392,19 @@ function bindStatic() {
   // Dashboard
   $('q-connect').onclick = () => connectPicked();
   $('q-disconnect').onclick = () => disconnectAll();
-  $('q-spam').onclick = async () => {
-    const r = state.spam
-      ? await bridge.bot.spamStop(effChatSlot())
-      : await bridge.bot.spamStart(effChatSlot());
-    if (!r || !r.ok) window.toast(T('tSpamFail'), 'warn');
-  };
-  $('q-join').onclick = async () => {
-    const r = await bridge.bot.runJoin(effChatSlot());
-    window.toast(r && r.ok ? T('tJoinRan') : T('tConnectFirst'), r && r.ok ? 'ok' : 'warn');
-  };
+  $('q-inv').onclick = () => openInventory();
+  const invCl = $('inv-close');
+  if (invCl) invCl.onclick = () => closeInventory();
+  const invMod = $('inv-modal');
+  if (invMod) invMod.addEventListener('click', (e) => { if (e.target === invMod) closeInventory(); });
+  document.addEventListener('keydown', (e) => {
+    const im = $('inv-modal');
+    if (!im || im.classList.contains('hidden')) return;
+    if (e.key === 'q' || e.key === 'Q') {
+      e.preventDefault();
+      invAct(e.ctrlKey ? 'all' : 'one');
+    }
+  });
   // Chat
   $('chat-send').onclick = () => sendChat('chat-input');
   $('dash-chat-send').onclick = () => sendChat('dash-chat-input');
@@ -2749,7 +3517,7 @@ function bindStatic() {
     window.applyI18n();
     renderAccounts(); renderProxies(); renderSpamList(); renderJoinList();
     renderSpamProfiles(); paintUpdateState();
-    renderMacro(); renderSlotTabs(); applyState(state);
+    renderMacro(); renderMacroSpawner(); renderAutoSell(); renderSlotTabs(); applyState(state);
     document.documentElement.lang = $('s-lang').value;
     window.toast(T('tLangSet'), 'ok');
   };
@@ -2813,6 +3581,7 @@ function bindStatic() {
     else if (spamAct) closeSpamActPicker();
     else if (featPick) closeFeatPicker();
     if (tilePick) closeTilePicker();
+    if ($('inv-modal') && !$('inv-modal').classList.contains('hidden')) closeInventory();
     if ($('vpn-settings-modal') && !$('vpn-settings-modal').classList.contains('hidden')) closeVpnSettings();
     if ($('vpn-country-modal') && !$('vpn-country-modal').classList.contains('hidden')) $('vpn-country-modal').classList.add('hidden');
   });

@@ -12,11 +12,18 @@ let mineflayer = null; // lazy: bagimliliklar kurulmadiysa uygulama gene de acil
 const AntiAfk = require('./anti-afk');
 const AutoSpam = require('./auto-spam');
 const MacroFarmer = require('./macro-farmer');
+const MacroSpawner = require('./macro-spawner');
+const AutoSell = require('./auto-sell');
+// Paket 77: Kullaniciya gorunen iki spawner özelliği deneme sürecinde.
+// Main config dışında doğrudan BotManager çağrısı yapılsa bile çalışmasın.
+const SPAWNER_FEATURES_LOCKED = true;
+const SpawnerProtect = require('./spawner-protect');
 const JoinMessages = require('./join-messages');
 const { DialogHandler, textOf, plainText } = require('./dialogs');
 const chatFmt = require('./chat-format');
 const ResourcePack = require('./respack');
 const { buildConnect } = require('./proxy');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function reconcileChatSpans(flat, spans) {
   const text = String(flat || '');
@@ -59,6 +66,16 @@ class BotManager extends EventEmitter {
     this.autoSpam = new AutoSpam(logger, (active) => this.emit('spam-state', active));
     this.macroFarmer = new MacroFarmer(logger);
     this.macroFarmer.onState = (st) => this.emit('macro-state', st);
+    // Paket 72: Spawner AFK - Auto Farm'un spawner'li varyanti (ayri durum)
+    this.spawnerMacro = new MacroSpawner(logger);
+    this.spawnerMacro.onState = (st) => this.emit('spawner-state', st);
+    // Paket 76: En yakin sandik -> hizli aktarim -> /sellall dongusu
+    this.autoSell = new AutoSell(logger);
+    this.autoSell.onState = (st) => this.emit('autosell-state', st);
+    this.spawnerProtect = new SpawnerProtect(logger);
+    // Paket 77: spawnerlar bitip "oyundan cik" aciksa manuel baglanti kesme gibi
+    // davran (auto reconnect DEVREDISI) -> hesap calismayi birakip oyundan cikar.
+    this.spawnerProtect.onExit = () => this.disconnect();
     this.dialogs = new DialogHandler(logger, (ev, data) => {
       if (ev === 'trace' && data && data.name) {           // writeRaw ile giden paketi de ize al
         this.trace.push(data.name);
@@ -89,6 +106,11 @@ class BotManager extends EventEmitter {
       spam: this.autoSpam.running,
       antiAfk: this.antiAfk.running,
       macro: this.macroFarmer.running,
+      spawnerMacro: this.spawnerMacro.running,
+      autoSell: this.autoSell.running,
+      autoSellState: this.autoSell.state(),
+      spawner: this.spawnerProtect.running,
+      spawnerBusy: this.spawnerProtect.busy,
       reconnectAttempts: this.reconnectAttempts,
       lastError: this.lastError
     };
@@ -282,13 +304,25 @@ class BotManager extends EventEmitter {
 
   // Canli acilip kapanabilen ayarlar
   setSneak(on) { try { if (this.bot) this.bot.setControlState('sneak', !!on); } catch (_) {} }
-  setPhysics(on) { try { if (this.bot && this.bot.physicsEnabled !== undefined) this.bot.physicsEnabled = !!on; } catch (_) {} }
+  setPhysics(on) {
+    try {
+      if (this.bot && this.bot.physicsEnabled !== undefined) this.bot.physicsEnabled = !!on;
+      // Paket 72: runtime degisikligi gunluge yazilir (kalici degildir; yeniden
+      // baglantida config'ten gelen deger uygulanir).
+      if (on !== undefined) {
+        this.logger.info(this.logger.L('Fizik değiştirildi (runtime): ', 'Physics changed (runtime): ') +
+          (!!on ? this.logger.L('AÇIK', 'ON') : this.logger.L('KAPALI', 'OFF')) +
+          this.logger.L(' — yeniden bağlantıda config ayarına döner.', ' — reverts to config on reconnect.'));
+      }
+    } catch (_) {}
+  }
 
   // -------------------------------------------------------------------------
   bindEvents() {
     const bot = this.bot;
     const t = this.cfg.toggles;
     this.traceWrites(bot);
+    this.attachKnockbackResponse(bot);
 
     bot.once('login', () => {
       this.loggedIn = true;
@@ -299,6 +333,17 @@ class BotManager extends EventEmitter {
       this.setStatus('ONLINE');           // sohbet ve komutlar artik kullanilabilir
       this.lastError = '';
       this.logger.connect('Login successful');
+      // Paket 72: fizik durumunu giris aninda logla - config'ten gelen deger ile
+      // calisan runtime deger ayri ayri yazilir. Fark varsa toggle runtime'da
+      // degismis demektir; bir daha "kim acti" karisikligi yasanmaz.
+      try {
+        const cfgOn = !!(this.cfg && this.cfg.toggles && this.cfg.toggles.physics);
+        const runOn = bot.physicsEnabled === true;
+        const st = runOn ? this.logger.L('AÇIK', 'ON') : this.logger.L('KAPALI', 'OFF');
+        this.logger.info(this.logger.L('Bot fiziği: config=', 'Bot physics: config=') + (cfgOn ? 'ON' : 'OFF') +
+          this.logger.L(' çalışan=', ' live=') + st +
+          (runOn !== cfgOn ? this.logger.L(' (fark var: runtime’da değişmiş)', ' (mismatch: changed at runtime)') : ''));
+      } catch (_) { /* yoksay */ }
       setTimeout(() => { try { this.dialogs.flushPending(); } catch (_) {} }, 1200);
       if ((this.cfg.connection.resourcePack || 'smart') === 'smart' && this.respack.requested) {
         this.logger.info(this.logger.L('Çalışan kaynak paketi yöntemi: ', 'Working resource pack method: ') + this.respack.mode);
@@ -359,6 +404,17 @@ class BotManager extends EventEmitter {
       this.startMacroGuard();
       if (t.antiAfk || this.cfg.antiAfk.enabled) this.antiAfk.start(bot, this.cfg.antiAfk);
       if (this.cfg.autoSpam.enabled) this.autoSpam.start(bot, this.cfg.autoSpam);
+      const as = (this.cfg.macros && this.cfg.macros.autoSell) || {};
+      if (as.enabled) this.startAutoSell(as, 'spawn');
+      if (!SPAWNER_FEATURES_LOCKED && this.cfg.spawnerProtect && this.cfg.spawnerProtect.enabled) {
+        this.spawnerProtect.start(bot, this.cfg);
+      } else if (this.cfg.spawnerProtect) {
+        // Paket 80: acik degilse nedenini goster - "mod acik ama calismiyor" sanisi
+        // cogu zaman anahtarın hicbir hesapta secili olmamasindan geliyordu.
+        this.logger.info(this.logger.L(
+          'Spawner Protect kapali (anahtar hicbir hesapta secili degil). SETTINGS > Spawner Koruma anahtarini acin.',
+          'Spawner protect is off (the switch is not enabled for any account). Turn it on in SETTINGS > Spawner protection.'));
+      }
 
     });
 
@@ -498,6 +554,58 @@ class BotManager extends EventEmitter {
     });
   }
 
+  // -------------------------------------------------------------------------
+  // Paket 72: KNOCKBACK YANIT PENCERESI
+  // Fizik KAPALIYKEN bot, sunucunun uyguladigi hizi (knockback) ve yercekimi
+  // yok sayar -> "vuruhta yerinden oynamiyor" + "alti kazilinca ucmuyor"
+  // (anti-knockback / anti-gravity) imzasi olusur. NexoMC gx01 gibi strict
+  // anticheat'ler bu vektoru "lag/cheat" diye okuyup kick atabiliyor.
+  // Vurulma aninda fizik motoru ~1.3 sn acilir: hiz DOGAL islenir, gerekirse
+  // dusus devam eder (uusta kalma imzasi olusmaz), pozisyon paketleri gider.
+  // Yere inince (veya 5 sn tavaninda) eski duruma doner.
+  // Fizik zaten ACIKSA (bot yuruyor) hicbir sey yapmaz - dogal tepki mevcut.
+  attachKnockbackResponse(bot) {
+    if (!bot || !bot._client) return;
+    let timer = null;
+    let settleTimer = null;
+    let openedAt = 0;
+    let wasOn = false;
+    let active = false;
+    const restore = () => {
+      if (!active) return;               // pencere kapaliysa kimsenin ayarina dokunma
+      active = false;
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+      try { if (bot.physicsEnabled !== undefined) bot.physicsEnabled = wasOn; } catch (_) {}
+    };
+    const settle = () => {
+      try {
+        const grounded = bot.entity && bot.entity.onGround === true;
+        if (grounded || Date.now() - openedAt > 5000) { restore(); return; }
+        settleTimer = setTimeout(settle, 400);
+      } catch (_) { restore(); }
+    };
+    bot._client.on('entity_velocity', (packet) => {
+      try {
+        if (!packet || !bot.entity || packet.entityId !== bot.entity.id) return;
+        const v = packet.velocity || {};
+        if ((v.x || 0) === 0 && (v.y || 0) === 0 && (v.z || 0) === 0) return; // iptal/0
+        if (bot.physicsEnabled === true) return;   // fizik acik: dogal tepki var
+        wasOn = bot.physicsEnabled === true;
+        openedAt = Date.now();
+        active = true;
+        try { bot.physicsEnabled = true; } catch (_) {}
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => { timer = null; settle(); }, 1300);
+      } catch (_) { /* yoksay */ }
+    });
+    // Paket 72/2: pencere ACIKKEN sunucu konum duzeltmesi (rubber-band/teleport)
+    // gelirse hemen kapat - bizim simulasyon sunucunun duzeltmesiyle catismasin,
+    // sunucu konumu kabul edilsin. Pencere kapaliyken hicbir yan etkisi yoktur.
+    bot._client.on('position', () => { try { restore(); } catch (_) {} });
+    bot.once('end', restore);
+  }
+
   // Sunucu bizi atarsa hangi paketin sebep oldugunu gorebilmek icin son gonderilenler tutulur
   traceWrites(bot) {
     this.trace = [];
@@ -523,15 +631,57 @@ class BotManager extends EventEmitter {
     const skip = /^(position|look|position_look|keep_alive|pong|teleport_confirm|arm_animation|player_input|vehicle_move|steer|held_item_slot|abilities|client_command|window_confirmation|ping_request)$/;
     const dbg = !!(this.cfg.settings && this.cfg.settings.packetLog);
     const orig = client.write.bind(client);
+    // Paket 77(2): paket yigilmasi / kick korumasi
+    //  * arm_animation (kol sallama) tekrari en az 90 ms arayla gecer; daha sik
+    //    gelenler ATILIR (tamamen goruntusel pakettir, islev kaybi yok).
+    //  * position / position_look / look paketleri 1 sn'de EN FAZLA 27 tane
+    //    gonderilir (vanilla ~20/sn). Fizik motoru CPU yukunde "burst" yapip
+    //    bunlari yigarsa fazlasi ATILIR - konum paketleri MUTLAK oldugu icin
+    //    aradakileri dusurmek guvenlidir (sunucu sadece son konumu gorur, eski
+    //    konumlari beklemez). Bu, spike'lari duzlestirir ve sunucularin
+    //    "normalden fazla hareket paketi" tespitiyle kick atmasini onler.
+    //    keep_alive/pong/teleport_confirm/action paketleri ETKILENMEZ.
+    //  * Teshis: 1 sn'lik pencerede 90+ giden paket olursa tur dagilimiyla tek
+    //    seferlik uyar (en fazla 15 sn'de bir) - hangi paketin yigildigini gosterir.
+    this._lastSwingAt = 0;
+    this._posLog = [];
+    this._pktRoll = { t: 0, n: 0, types: null };
+    this._pktWarnedAt = 0;
     client.write = (name, params) => {
+      const n = String(name);
+      const tNow = Date.now();
       try {
-        const n = String(name);
+        if (n === 'arm_animation') {
+          if (this._lastSwingAt && tNow - this._lastSwingAt < 90) return;
+          this._lastSwingAt = tNow;
+        } else if (n === 'position' || n === 'position_look' || n === 'look') {
+          this._posLog.push(tNow);
+          while (this._posLog.length && tNow - this._posLog[0] > 1000) this._posLog.shift();
+          if (this._posLog.length > 27) { this._posLog.shift(); return; }
+        }
         if (!skip.test(n)) {
           this.trace.push(n);
           if (this.trace.length > 8) this.trace.shift();
           if (dbg) this.logger.info('-> ' + n);
           if (n === 'login_acknowledged') this.afterLoginAck(client);
         }
+        if (!this._pktRoll || tNow - this._pktRoll.t >= 1000) {
+          if (this._pktRoll && this._pktRoll.n > 140 && tNow - (this._pktWarnedAt || 0) > 15000) {
+            this._pktWarnedAt = tNow;
+            let top = '';
+            try {
+              top = Array.from(this._pktRoll.types || []).sort((a, b) => b[1] - a[1]).slice(0, 6)
+                .map((kv) => kv[0] + ':' + kv[1]).join(' ');
+            } catch (_) {}
+            this.logger.warn(this.logger.L(
+              'Yüksek paket hızı (' + this._pktRoll.n + ' pkt/sn) — kick sebebi olabilir. Dağılım: ' + top,
+              'High packet rate (' + this._pktRoll.n + ' pkt/s) - may cause kicks. Split: ' + top));
+          }
+          this._pktRoll = { t: tNow, n: 0, types: new Map() };
+        }
+        this._pktRoll.n += 1;
+        if (!this._pktRoll.types.has(n)) this._pktRoll.types.set(n, 0);
+        this._pktRoll.types.set(n, this._pktRoll.types.get(n) + 1);
       } catch (_) {}
       return orig(name, params);
     };
@@ -666,6 +816,9 @@ class BotManager extends EventEmitter {
     this.dialogOpen = false;
     this.autoSpam.stop(true);
     this.macroFarmer.stop(true);
+    this.spawnerMacro.stop(true);
+    this.autoSell.stop(true);
+    this.spawnerProtect.stop();
     this.stopMacroGuard();
     this.connectedAt = null;
     this.ping = 0;
@@ -702,6 +855,83 @@ class BotManager extends EventEmitter {
     this.setStatus('OFFLINE');
     this.logger.disconnect('Manual disconnect');
     return { ok: true };
+  }
+
+  // ----- Envanter (PANEL > ENVANTER) ---------------------------------------
+  // Secili hesabin envanterini arayuze dondur: zırh (5-8), ana (9-35),
+  // sicak bar (36-44), diger el (45). Sadece kendi envanter penceresi.
+  inventoryList() {
+    const bot = this.bot;
+    if (!bot || !bot.inventory) return { ok: false, error: 'no_bot' };
+    try {
+      const inv = bot.inventory.slots || [];
+      const zones = [
+        { zone: 'armor', start: 5, end: 8 },
+        { zone: 'main', start: 9, end: 35 },
+        { zone: 'hotbar', start: 36, end: 44 },
+        { zone: 'offhand', start: 45, end: 45 }
+      ];
+      const slots = [];
+      for (const z of zones) {
+        for (let s = z.start; s <= z.end; s++) {
+          const it = inv[s];
+          slots.push(it && it.type > 0 && it.count > 0
+            ? {
+                slot: s, zone: z.zone, empty: false,
+                type: it.type, metadata: it.metadata, count: it.count,
+                name: it.name || '', displayName: (it.displayName || it.name || ''),
+                maxStackSize: it.maxStackSize || 64
+              }
+            : { slot: s, zone: z.zone, empty: true, count: 0, name: '', displayName: '' });
+        }
+      }
+      return {
+        ok: true,
+        account: (this.account && (this.account.username || this.account.id)) || '',
+        slots,
+        windowOpen: !!(bot.currentWindow && bot.currentWindow !== bot.inventory)
+      };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || String(e) };
+    }
+  }
+
+  // Tek islem: inventoryAction(windowSlot, 'one' | 'all' | 'split')
+  //  * 'one'   -> clickWindow(slot, 0, 4)  = Q ile 1 tane dusur
+  //  * 'all'   -> clickWindow(slot, 1, 4)  = Ctrl+Q ile yiginin tamamini dusur
+  //  * 'split' -> clickWindow(slot, 1, 0)  = sag tik: yarisini kaldir,
+  //              sonra ilk bos kareye koy; bos kare yoksa kaldirilani dus.
+  // Makro/sunucu ekrani acikken envanter degistirilmez (pw: slotlar farkli).
+  async inventoryAction(winSlot, action) {
+    const bot = this.bot;
+    if (!bot || !bot.inventory) return { ok: false, error: 'no_bot' };
+    if (bot.currentWindow && bot.currentWindow !== bot.inventory) {
+      return { ok: false, error: 'window_open' };
+    }
+    const slotIdx = Number(winSlot);
+    const it = bot.inventory.slots[slotIdx];
+    if (!it || it.type === 0 || it.count <= 0) return { ok: false, error: 'empty' };
+    try {
+      if (action === 'one') {
+        await bot.clickWindow(slotIdx, 0, 4);
+      } else if (action === 'all') {
+        await bot.clickWindow(slotIdx, 1, 4);
+      } else if (action === 'split') {
+        await bot.clickWindow(slotIdx, 1, 0);
+        const empty = bot.inventory.firstEmptyInventorySlot();
+        if (empty !== null && empty !== undefined && empty !== slotIdx) {
+          await bot.clickWindow(empty, 0, 0);
+        } else {
+          await bot.clickWindow(-999, 0, 0);   // bos kare yok -> kaldirilan yari dussun
+        }
+      } else {
+        return { ok: false, error: 'bad_action' };
+      }
+      await sleep(150);   // sunucu senkronu icin kisa bekleme
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || String(e) };
+    }
   }
 
   // Gonderenin adi: UUID -> oyuncu adi
@@ -798,6 +1028,60 @@ class BotManager extends EventEmitter {
 
   macroState() { return this.macroFarmer.state(); }
 
+  // --- Spawner AFK (Paket 72) ---------------------------------------------
+  startMacroSpawner(cfg, why) {
+    if (SPAWNER_FEATURES_LOCKED) {
+      this.spawnerMacro.stop(true);
+      return {
+        ok: false,
+        error: this.logger.L(
+          'Spawner AFK şu an kapalı; özellik deneme sürecinde.',
+          'Spawner AFK is currently unavailable while testing.'
+        )
+      };
+    }
+    if (!this.bot || !this.loggedIn) {
+      return { ok: false, error: this.logger.L('Sunucuya bağlı değilsiniz', 'You are not connected to the server') };
+    }
+    const r = this.spawnerMacro.start(this.bot, cfg || ((this.cfg.macros && this.cfg.macros.spawner) || {}));
+    if (r && r.ok && why && why !== 'manual') {
+      this.logger.info(this.logger.L(`Spawner AFK otomatik başlatıldı (${why})`, `Spawner AFK started automatically (${why})`));
+    }
+    // Makro acik kaldigi surece calissin diye denetci de kurulur
+    if (r && r.ok) this.startMacroGuard();
+    this.emit('status', this.state());
+    return r;
+  }
+
+  stopMacroSpawner() {
+    this.spawnerMacro.stop();
+    this.emit('status', this.state());
+    return { ok: true };
+  }
+
+  spawnerMacroState() { return this.spawnerMacro.state(); }
+
+  // --- Auto Sell (Paket 76) -----------------------------------------------
+  startAutoSell(cfg, why) {
+    if (!this.bot || !this.loggedIn) {
+      return { ok: false, error: this.logger.L('Sunucuya bağlı değilsiniz', 'You are not connected to the server') };
+    }
+    const r = this.autoSell.start(this.bot, cfg || ((this.cfg.macros && this.cfg.macros.autoSell) || {}));
+    if (r && r.ok && why && why !== 'manual') {
+      this.logger.info(this.logger.L(`Auto Sell otomatik başlatıldı (${why})`, `Auto Sell started automatically (${why})`));
+    }
+    this.emit('status', this.state());
+    return r;
+  }
+
+  stopAutoSell() {
+    this.autoSell.stop();
+    this.emit('status', this.state());
+    return { ok: true };
+  }
+
+  autoSellState() { return this.autoSell.state(); }
+
   // O an acik olan sunucu ekranindaki esyalari okur (arayuzde kareleri
   // isimlendirmek icin): kullanici kare saymak zorunda kalmaz.
   peekWindow(silent) {
@@ -889,24 +1173,47 @@ class BotManager extends EventEmitter {
     };
   }
 
-  // GIRIS KOMUTLARI + (istenirse) Auto Farm ayni sirada calisir.
+  // Spawner AFK ayarlari (komut yoktur; adim listesi yeterlidir)
+  spawnerCfg() {
+    const ms = (this.cfg.macros && this.cfg.macros.spawner) || {};
+    return {
+      cfg: ms,
+      // Ekran adımı seçilmese bile Spawner AFK çalışır: spawner'a döner ve
+      // sağ tıklar. Adımlar yalnızca açılan menüde ek işlem istenirse gerekir.
+      on: !SPAWNER_FEATURES_LOCKED && !!ms.enabled,
+      mode: ms.startMode === 'delay' ? 'delay' : 'join',
+      at: Math.max(0, Number(ms.joinIndex) || 0),
+      delay: Math.max(0, Number(ms.startDelay) === 0 ? 0 : (Number(ms.startDelay) || 3))
+    };
+  }
+
+  // GIRIS KOMUTLARI + (istenirse) Auto Farm / Spawner AFK ayni sirada calisir.
   // Sunucu restart atsa da, auto reconnect olsa da bu zincir bastan kurulur.
   runJoinChain(bot, why) {
     if (!bot) return;
     const t = this.cfg.toggles || {};
     const f = this.farmerCfg();
+    const ms = this.spawnerCfg();
     const cmds = t.joinMessages ? (this.cfg.joinMessages.commands || []) : [];
-    let extra = null;
+    const extras = [];
     if (f.on && f.mode === 'join') {
-      extra = {
+      extras.push({
         at: f.at,                       // 0 = en son
         delay: f.delay,
         label: this.logger.L('Auto Farm başlatılıyor', 'starting Auto Farm'),
         run: () => this.startMacro(this.cfg.macros.farmer, why || 'join')
-      };
+      });
     }
-    if (!cmds.length && !extra) return;
-    const r = this.joinMessages.run(bot, cmds, { extra });
+    if (ms.on && ms.mode === 'join') {
+      extras.push({
+        at: ms.at,
+        delay: ms.delay,
+        label: this.logger.L('Spawner AFK başlatılıyor', 'starting Spawner AFK'),
+        run: () => this.startMacroSpawner(this.cfg.macros.spawner, why || 'join')
+      });
+    }
+    if (!cmds.length && !extras.length) return;
+    const r = this.joinMessages.run(bot, cmds, { extra: extras });
     if (r.count) {
       const plan = this.joinMessages.plan.map((x) => `${x.no}) ${x.text} (+${x.delay}s)`).join('  ·  ');
       this.logger.info(this.logger.L(`Giriş sırası kuruldu: ${plan}`, `Join order scheduled: ${plan}`));
@@ -918,27 +1225,50 @@ class BotManager extends EventEmitter {
         if (this.bot && this.loggedIn) this.startMacro(this.cfg.macros.farmer, 'delay');
       }, Math.max(0, f.delay) * 1000 || 4000);
     }
+    if (ms.on && ms.mode === 'delay') {
+      if (this.spawnerDelayTimer) clearTimeout(this.spawnerDelayTimer);
+      this.spawnerDelayTimer = setTimeout(() => {
+        if (this.bot && this.loggedIn) this.startMacroSpawner(this.cfg.macros.spawner, 'delay');
+      }, Math.max(0, ms.delay) * 1000 || 4000);
+    }
   }
 
-  // Makro acikken KAPATILANA KADAR calissin: her 20 sn'de bir denetlenir
+  // Makro(lar) acikken KAPATILANA KADAR calissin: her 20 sn'de bir denetlenir
   startMacroGuard() {
     this.stopMacroGuard();
     this.macroGuard = setInterval(() => {
       const f = this.farmerCfg();
-      if (!f.on) return;
-      if (!this.bot || !this.loggedIn) return;
-      if (this.macroFarmer.running) return;
-      if (this.macroFarmer.busy) return;
-      this.logger.info(this.logger.L(
-        'Auto Farm açık ama çalışmıyordu, yeniden başlatıldı',
-        'Auto Farm was enabled but not running, restarted'));
-      this.startMacro(this.cfg.macros.farmer, 'guard');
+      if (f.on) {
+        if (this.bot && this.loggedIn && !this.macroFarmer.running && !this.macroFarmer.busy) {
+          this.logger.info(this.logger.L(
+            'Auto Farm açık ama çalışmıyordu, yeniden başlatıldı',
+            'Auto Farm was enabled but not running, restarted'));
+          this.startMacro(this.cfg.macros.farmer, 'guard');
+        }
+      }
+      const ms = this.spawnerCfg();
+      if (ms.on) {
+        if (this.bot && this.loggedIn && !this.spawnerMacro.running && !this.spawnerMacro.busy) {
+          this.logger.info(this.logger.L(
+            'Spawner AFK açık ama çalışmıyordu, yeniden başlatıldı',
+            'Spawner AFK was enabled but not running, restarted'));
+          this.startMacroSpawner(this.cfg.macros.spawner, 'guard');
+        }
+      }
+      const as = (this.cfg.macros && this.cfg.macros.autoSell) || {};
+      if (as.enabled && this.bot && this.loggedIn && !this.autoSell.running && !this.autoSell.busy) {
+        this.logger.info(this.logger.L(
+          'Auto Sell açık ama çalışmıyordu, yeniden başlatıldı',
+          'Auto Sell was enabled but not running, restarted'));
+        this.startAutoSell(as, 'guard');
+      }
     }, 20000);
   }
 
   stopMacroGuard() {
     if (this.macroGuard) { clearInterval(this.macroGuard); this.macroGuard = null; }
     if (this.macroDelayTimer) { clearTimeout(this.macroDelayTimer); this.macroDelayTimer = null; }
+    if (this.spawnerDelayTimer) { clearTimeout(this.spawnerDelayTimer); this.spawnerDelayTimer = null; }
   }
 
   // --- Sunucu ekranlari (dialog) -------------------------------------------
@@ -980,6 +1310,20 @@ class BotManager extends EventEmitter {
     if (this.autoSpam && this.autoSpam.running && typeof this.autoSpam.apply === 'function') {
       this.autoSpam.apply(cfg.autoSpam || {});
     }
+    // Spawner Protect: acikken secenek degisince ac/kapa yapmaya gerek kalmasin
+    const sp = cfg.spawnerProtect || {};
+    if (this.spawnerProtect) {
+      if (SPAWNER_FEATURES_LOCKED) {
+        if (this.spawnerProtect.running) this.spawnerProtect.stop();
+      } else
+      if (this.spawnerProtect.running) {
+        if (sp.enabled === false) { this.spawnerProtect.stop(); this.logger.info('Spawner Protect disabled'); this.emit('status', this.state()); }
+        else this.spawnerProtect.apply(sp);
+      } else if (sp.enabled && this.bot && this.loggedIn) {
+        this.spawnerProtect.start(this.bot, this.cfg);
+        this.emit('status', this.state());
+      }
+    }
     // Auto Farm: anahtar/adimlar degisince calisirken de gecerli olsun
     const mf = (cfg.macros && cfg.macros.farmer) || {};
     if (this.macroFarmer) {
@@ -988,6 +1332,29 @@ class BotManager extends EventEmitter {
         else this.macroFarmer.updateOptions(mf);
       } else if (mf.enabled && this.bot && this.loggedIn) {
         this.startMacro(mf);
+      }
+    }
+    // Spawner AFK: anahtar/adimlar/erim degisince calisirken de gecerli olsun
+    const ms = (cfg.macros && cfg.macros.spawner) || {};
+    if (this.spawnerMacro) {
+      if (SPAWNER_FEATURES_LOCKED) {
+        if (this.spawnerMacro.running) this.spawnerMacro.stop(true);
+      } else
+      if (this.spawnerMacro.running) {
+        if (ms.enabled === false) this.stopMacroSpawner();
+        else this.spawnerMacro.updateOptions(ms);
+      } else if (ms.enabled && this.bot && this.loggedIn) {
+        this.startMacroSpawner(ms);
+      }
+    }
+    // Auto Sell: anahtar veya aralik degisince aninda uygula
+    const as = (cfg.macros && cfg.macros.autoSell) || {};
+    if (this.autoSell) {
+      if (this.autoSell.running) {
+        if (as.enabled === false) this.stopAutoSell();
+        else this.autoSell.apply(as);
+      } else if (as.enabled && this.bot && this.loggedIn) {
+        this.startAutoSell(as);
       }
     }
   }

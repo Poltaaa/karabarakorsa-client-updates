@@ -60,6 +60,9 @@ class AntiAfk {
 
   async tick() {
     if (!this.running || !this.bot || !this.bot.entity) return this.schedule();
+    // Spawner AFK tam merkeze bakip eklenti etkilesimini gonderirken rastgele
+    // bakma/eğilme hareketi hedefi bozmasin. Tur bitince normal takvim sürer.
+    if (this.bot.__spawnerAfkInteracting || this.bot.__autoSellInteracting) return this.schedule();
     const actions = [];
     if (this.cfg.walk || this.cfg.randomMovement) actions.push('walk');
     if (this.cfg.jump) actions.push('jump');

@@ -25,6 +25,10 @@ let quitting = false;
 let tor = null;
 
 const APP_NAME = 'Karabarakorsa AFK Client';
+// Paket 77: Deneme tamamlanana kadar bu iki özellik hem arayüzde hem çalışma
+// motorunda zorunlu olarak kapalıdır. Eski config'te açık görünseler bile
+// hiçbir hesaba uygulanmazlar.
+const FORCED_DISABLED_FEATURES = new Set(['macroSpawner', 'spawnerProtect']);
 
 // Windows bildirimlerinde "electron.app..." yazmamasi icin uygulama kimligi
 app.setName(APP_NAME);
@@ -256,7 +260,8 @@ function slotList() {
       ping: st.ping || 0,
       spam: !!st.spam,
       antiAfk: !!st.antiAfk,
-      macro: !!st.macro
+      macro: !!st.macro,
+      autoSell: !!st.autoSell
     };
   });
 }
@@ -286,6 +291,8 @@ function wireSession(s) {
   });
   b.on('spam-state', (a) => { send('spam-state', { slot: s.slot, active: a }); sendSlots(); });
   b.on('macro-state', (st) => { send('macro-state', Object.assign({ slot: s.slot }, st)); sendSlots(); });
+  b.on('spawner-state', (st) => { send('spawner-state', Object.assign({ slot: s.slot }, st)); sendSlots(); });
+  b.on('autosell-state', (st) => { send('autosell-state', Object.assign({ slot: s.slot }, st)); sendSlots(); });
   b.on('screen-open', (d) => send('screen-open', Object.assign({ slot: s.slot }, d || {})));
   b.on('screen-close', () => send('screen-close', { slot: s.slot }));
   b.on('dialog', (d) => {
@@ -325,7 +332,8 @@ function removeSession(slot) {
   return { ok: true, removed: s.slot };
 }
 
-// Bot kendi kendine cevrimdisi kaldiysa (ve yeniden baglanma beklemiyorsa) oturumu kapat
+// Bot kendi kendine cevrimdisi kaldiysa (ve yeniden baglanma beklemiyorsa) oturumu kapat.
+// Hesap oyundan cikinca mesajlar ve loglar 10 sn daha gorunur kalir, SONRA silinir.
 function scheduleSessionCleanup(s) {
   if (s.cleanupTimer) clearTimeout(s.cleanupTimer);
   s.cleanupTimer = setTimeout(() => {
@@ -334,7 +342,7 @@ function scheduleSessionCleanup(s) {
     const b = s.bot;
     if (!b || b.status !== 'OFFLINE' || b.reconnectTimer) return;
     removeSession(s.slot);
-  }, 2500);
+  }, 10000);
 }
 
 function createSession(account) {
@@ -372,7 +380,11 @@ function hideToBackground() {
 }
 
 function offlineState() {
-  return { slot: 0, status: 'OFFLINE', server: '', account: '', ping: 0, uptime: 0, spam: false, antiAfk: false };
+  return {
+    slot: 0, status: 'OFFLINE', server: '', account: '', ping: 0, uptime: 0,
+    spam: false, antiAfk: false, macro: false, spawnerMacro: false, autoSell: false,
+    autoSellState: { running: false, busy: false, cycles: 0, stacks: 0, items: 0, nextAt: 0 }
+  };
 }
 
 function disconnectAll() {
@@ -604,6 +616,7 @@ function featList(cfg, key) {
 }
 // Ayar acik mi? (hesap secimi korunur, ayri bir bayrak ayari kapatir)
 function featEnabled(cfg, key) {
+  if (FORCED_DISABLED_FEATURES.has(key)) return false;
   const fe = (cfg && cfg.featureEnabled) || {};
   return fe[key] !== false && featList(cfg, key).length > 0;
 }
@@ -622,7 +635,10 @@ function syncToggleSummary() {
   }
   cfg.toggles = Object.assign({}, cfg.toggles, t);
   if (cfg.macros && cfg.macros.farmer) cfg.macros.farmer.enabled = featEnabled(cfg, 'macroFarmer');
+  if (cfg.macros && cfg.macros.spawner) cfg.macros.spawner.enabled = featEnabled(cfg, 'macroSpawner');
+  if (cfg.macros && cfg.macros.autoSell) cfg.macros.autoSell.enabled = featEnabled(cfg, 'macroAutoSell');
   if (cfg.autoSpam) cfg.autoSpam.enabled = featEnabled(cfg, 'autoSpam');
+  if (cfg.spawnerProtect) cfg.spawnerProtect.enabled = featEnabled(cfg, 'spawnerProtect');
   if (cfg.antiAfk) cfg.antiAfk.enabled = !!t.antiAfk;
   if (cfg.autoReconnect) cfg.autoReconnect.enabled = !!t.autoReconnect;
   store.saveDebounced();
@@ -669,8 +685,20 @@ function configForAccount(accountId) {
   c.tor = { ...(base.tor || {}), enabled: !!(base.tor && base.tor.enabled === true && base.tor.connectionEnabled === true && vpnAppliesTo(base, accountId)) };
   if (vpnLiveFor(base, accountId) && c.tor.streamSeparation) c.vpnNewIdentity = () => tor.newIdentity();
   const farmer = (base.macros && base.macros.farmer) || {};
-  c.macros = { ...(base.macros || {}), farmer: { ...farmer, enabled: featOn(base, 'macroFarmer', accountId) } };
+  c.macros = {
+    ...(base.macros || {}),
+    farmer: { ...farmer, enabled: featOn(base, 'macroFarmer', accountId) },
+    // Paket 72: Spawner AFK - hesaba ozel anahtar
+    spawner: { ...((base.macros && base.macros.spawner) || {}), enabled: featOn(base, 'macroSpawner', accountId) },
+    // Paket 76: Auto Sell - hesaba ozel anahtar
+    autoSell: { ...((base.macros && base.macros.autoSell) || {}), enabled: featOn(base, 'macroAutoSell', accountId) }
+  };
   c.autoSpam = spamCfgFor(accountId, base);
+  // Paket 80: anahtar "en az bir hesapta" aciksa koruma BAĞLI TUM botlarda devreye
+  // girer. (Kullanici "mod acik = koruma acik" bekliyor; hesap secimi arayuzde
+  // durur ama korumayi sadece secili hesaplara kisitlamaz - aksi halde mod
+  // acikken kazmiyor, kapat-ac yapinca calisiyordu.)
+  c.spawnerProtect = { ...(base.spawnerProtect || {}), enabled: featEnabled(base, 'spawnerProtect') };
   return c;
 }
 function pushConfigToSessions() {
@@ -864,6 +892,28 @@ ipcMain.handle('macro:stop', (_e, slot) => {
   const b = botBySlot(slot);
   return b ? b.stopMacro() : { ok: false, error: 'no_session' };
 });
+// Paket 72: Spawner AFK - makro yuvasi komuttan bagimsiz (spawner sag tik)
+ipcMain.handle('spawner:start', (_e, slot) => {
+  return {
+    ok: false,
+    error: L('Spawner AFK şu an kapalı; özellik deneme sürecinde.', 'Spawner AFK is currently unavailable while testing.')
+  };
+});
+ipcMain.handle('spawner:stop', (_e, slot) => {
+  const b = botBySlot(slot);
+  return b ? b.stopMacroSpawner() : { ok: false, error: 'no_session' };
+});
+// Paket 76: En yakin sandiktan hizli toplama + /sellall dongusu
+ipcMain.handle('autosell:start', (_e, slot) => {
+  const s = slot ? sessionBySlot(slot) : activeSession();
+  if (!s) return { ok: false, error: 'no_session' };
+  const cfg = configForAccount(s.accountId);
+  return s.bot.startAutoSell((cfg.macros && cfg.macros.autoSell) || {});
+});
+ipcMain.handle('autosell:stop', (_e, slot) => {
+  const b = botBySlot(slot);
+  return b ? b.stopAutoSell() : { ok: false, error: 'no_session' };
+});
 ipcMain.handle('bot:antiafk', (_e, payload) => {
   const enabled = typeof payload === 'object' && payload !== null ? payload.enabled : payload;
   const b = botBySlot(payload && payload.slot);
@@ -872,6 +922,17 @@ ipcMain.handle('bot:antiafk', (_e, payload) => {
 ipcMain.handle('bot:run-join', (_e, slot) => {
   const b = botBySlot(slot);
   return b ? b.runJoinMessages() : { ok: false, error: 'no_session' };
+});
+
+// --- Envanter (paket 77: PANEL > ENVANTER) ----------------------------------
+ipcMain.handle('bot:inventory-get', (_e, slot) => {
+  const b = botBySlot(slot);
+  return b ? b.inventoryList() : { ok: false, error: 'no_session' };
+});
+ipcMain.handle('bot:inventory-drop', async (_e, payload) => {
+  const p = payload || {};
+  const b = botBySlot(p.slot);
+  return b ? b.inventoryAction(p.winSlot, p.action) : { ok: false, error: 'no_session' };
 });
 
 // --- Sunucu ekranlari (dialog) ----------------------------------------------
