@@ -513,6 +513,7 @@ async function addProxy() {
 }
 
 let vpnBusy = false;
+let vpnRenderSeq = 0;
 const VPN_COUNTRIES = [
   ['', 'Automatic'], ['AR', 'Argentina'], ['AU', 'Australia'], ['AT', 'Austria'], ['BE', 'Belgium'], ['BR', 'Brazil'],
   ['BG', 'Bulgaria'], ['CA', 'Canada'], ['CL', 'Chile'], ['CN', 'China'], ['CO', 'Colombia'], ['HR', 'Croatia'],
@@ -530,12 +531,23 @@ function vpnCountryName() {
   if (!list.length) return 'Automatic';
   return list.map((x) => (VPN_COUNTRIES.find((c) => c[0] === x) || [x, x])[1]).join(', ');
 }
-async function renderTor() {
+async function renderTor(runtimeStatus) {
   if (!bridge.tor || !cfg) return;
+  const seq = ++vpnRenderSeq;
   const vpn = cfg.tor || (cfg.tor = {});
-  const r = await bridge.tor.status(); const on = vpn.enabled === true && vpn.connectionEnabled === true && !!(r && r.running);
+  const r = runtimeStatus || await bridge.tor.status();
+  if (seq !== vpnRenderSeq) return;
+  // Ana süreç active alanını kalıcı ayar + gerçek çalışan motor üzerinden
+  // hesaplar. Eski renderer config'i yalnızca geriye dönük yedektir.
+  const on = r && typeof r.active === 'boolean'
+    ? r.active
+    : vpn.enabled === true && vpn.connectionEnabled === true && !!(r && r.running);
+  if (r && typeof r.enabled === 'boolean') vpn.enabled = r.enabled;
+  if (r && typeof r.connectionEnabled === 'boolean') vpn.connectionEnabled = r.connectionEnabled;
   const el = $('tor-status'); if (el) { el.textContent = on ? 'ON' : 'OFF'; el.classList.toggle('on', on); }
   if ($('vpn-state')) { $('vpn-state').textContent = on ? 'ON' : 'OFF'; $('vpn-state').classList.toggle('vpn-on', on); }
+  const card = $('vpn-card'); if (card) { card.classList.toggle('vpn-active', on); card.classList.toggle('vpn-busy', vpnBusy); }
+  const start = $('tor-start'); if (start) { start.classList.toggle('is-on', on); start.setAttribute('aria-pressed', on ? 'true' : 'false'); }
   if ($('tor-new')) $('tor-new').disabled = !on || vpnBusy;
   if ($('tor-start')) $('tor-start').disabled = vpnBusy;
   if ($('tor-stop')) $('tor-stop').disabled = vpnBusy;
@@ -3231,12 +3243,19 @@ bridge.on('config-changed', (data) => {
   try { $('c-respack').value = cfg.connection.resourcePack || 'smart'; window.refreshSelect($('c-respack')); } catch (_) {}
   try { renderAccounts(); } catch (_) {}
   try { renderDashTiles(); applyFeatureUI(); updateFakeHostField(); } catch (_) {}
+  renderTor().catch(() => {});
 });
 bridge.on('dialog-close', (d) => {
   if (d && d.slot && currentDialog && currentDialog.slot && d.slot !== currentDialog.slot) return;
   currentDialog = null; stopAutoCountdown(false); $('dlg-modal').classList.add('hidden');
 });
 bridge.on('win-state', (max) => { $('win-max').title = window.t(max ? 'winMin' : 'winMax'); });
+bridge.on('tor-state', async (runtime) => {
+  try {
+    cfg = await bridge.config.get();
+    await renderTor(runtime);
+  } catch (_) {}
+});
 // Guncelleme olaylari
 bridge.on('update-state', (s) => {
   updState = s || { ok: false };
@@ -3247,10 +3266,12 @@ bridge.on('update-error', (e) => window.toast(updErrorText(e && e.error), 'error
 // Uygulama arka plandan geri gelince: log/sohbet gecmisi main'deki tampondan yeniden cizilir
 bridge.on('refresh', async () => {
   try {
+    cfg = await bridge.config.get();
     await refreshSlots();
     await renderLogHistory();
     await renderChatHistory();
     applyState(await bridge.bot.state(effChatSlot()));
+    await renderTor();
   } catch (_) {}
 });
 

@@ -1,5 +1,32 @@
 # Değişiklik Günlüğü
 
+## 1.15.16 · Paket 84 · GitHub yayın sürümü
+
+- Uygulama sürümü tüm yayın noktalarında **v1.15.16** olarak yükseltildi: paket metadata’sı, kilit dosyası, kenar çubuğu, başlatma/derleme dosyaları, README ve güncelleme örneği eşitlendi.
+- Paket 83’teki VPN gerçek durum eşitlemesi ve temaya uyumlu VPN arayüzü bu yayın sürümüne dahil edildi.
+- GitHub dağıtımı için kök dosya adları `BASLAT-84.bat`, `EXE-OLUSTUR-84.bat` ve `diag-84.js` olarak güncellendi.
+
+## 1.15.15 · Paket 83 · VPN durum ve tema düzeltmesi
+
+- Pencere sağ üstteki çarpıdan gizlenip yeniden açıldığında VPN göstergesi artık kayıtlı ayarı değil, çalışan VPN motorunun gerçek durumunu yeniden sorguluyor.
+- Uygulama açılışındaki VPN otomatik başlatma yarışı giderildi; motor açıldıktan, kapandıktan veya beklenmedik biçimde durduktan sonra arayüz anında doğru **ON/OFF** durumuna eşitleniyor.
+- VPN başlangıcı başarısız olursa eski açık durumu kalıcı ayarlardan temizleniyor; kapalı görünen fakat arka planda açık kalan veya tam tersi görünen durumlar engelleniyor.
+- Proxyler sayfasındaki VPN kartı, düğmeler, durum rozeti, ülke satırı ve pencereler istemcinin mevcut koyu/açık temasına uygun biçimde yeniden tasarlandı. İşlevler değiştirilmedi.
+
+## 1.15.15 · Paket 82 · SkyBlock offset ve Electron güvenlik düzeltmesi
+
+- SkyBlock’a girdikten bir süre sonra gelen `ERR_OUT_OF_RANGE / offset is out of range` ayrıştırma hatası da kesintisiz uyumluluk katmanına alındı.
+- Koruma artık yalnızca “abnormally large array” hatasını değil, **play/configuration aşamasındaki tüm tek-frame ayrıştırma uyumsuzluklarını** stream’i kapatmadan atlıyor. Login ve kimlik doğrulama hataları fatal kalmaya devam ediyor.
+- Hatalı paketin sınırı splitter tarafından önceden ayrıldığı için sonraki paketler güvenle okunuyor; `entity_equipment` gibi eklenti kaynaklı büyük paketler bağlantıyı veya gelen sohbeti durduramıyor.
+- Renderer’a sıkı Content Security Policy eklendi. Kaynak koddan çalıştırırken görünen `Electron Security Warning (Insecure Content-Security-Policy)` giderildi; harici script, bağlantı ve object yüklemeleri kapatıldı.
+
+## 1.15.15 · Paket 81 · Kesintisiz SkyBlock aktarımı
+
+- SkyBlock’taki uyumsuz paketten sonra gelen paket akışının durup 60 saniye sonra `client timed out` vermesinin kök nedeni düzeltildi: bozuk frame artık deserializer stream’i hata durumuna sokmadan yakalanıp atlanıyor.
+- Protokol durumu login → configuration → play olarak her değiştiğinde oluşturulan yeni ayrıştırıcı otomatik olarak yeniden korunuyor; bağlantı gerçekten gelen paketleri okumaya devam ediyor.
+- Bilinen uyumsuz paket dışındaki protokol hataları gizlenmiyor; gerçek bağlantı sorunları normal şekilde raporlanmaya devam ediyor.
+- `/login` sonrasında oluşan dünya değişiminin çalışan giriş zincirini iptal edip sıradaki `/gir skyblock-spawn` komutunu silmesi engellendi. Devam eden sıra tamamlanana kadar korunuyor.
+
 ## 1.15.15 · Paket 80 · GitHub yayın sürümü
 
 - Uygulama sürümü tüm yayın noktalarında **v1.15.15** olarak yükseltildi: paket metadata’sı, kilit dosyası, kenar çubuğu, başlatma/derleme dosyaları, README ve güncelleme örneği aynı sürüme getirildi.

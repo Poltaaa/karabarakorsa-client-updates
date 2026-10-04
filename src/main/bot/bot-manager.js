@@ -26,13 +26,17 @@ const { buildConnect } = require('./proxy');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Proxy arkasindaki bazi SkyBlock sunuculari, vanilla istemcinin tolere ettigi
-// fakat Prismarine protokol semasinda NBT/dizi alaniyla cakisan ek paketler
-// gonderebiliyor. minecraft-protocol her paketi ayri frame olarak cozer; bu
-// nedenle hatali tek frame'i atlamak sonraki paketlerin sinirini bozmaz.
+// fakat Prismarine protokol semasinda NBT/dizi/offset alaniyla cakisan ek
+// paketler gonderebiliyor. minecraft-protocol her paketi ayri frame olarak
+// cozer; bu nedenle hatali tek frame'i stream'i oldurmeden atlamak sonraki
+// paketlerin sinirini bozmaz.
 function isRecoverableIncomingParseError(err) {
   const msg = String(err && err.message ? err.message : err || '');
+  // Parser sarmalayicisi yalnizca gelen play/configuration frame'lerinde bu
+  // isareti koyar; mesaj turu degisse bile frame guvenle atlanabilir.
+  if (err && err.__kbInboundParser) return true;
   return /Parse error for (?:play|configuration)\.toClient/i.test(msg) &&
-    /array size is abnormally large/i.test(msg);
+    /array size is abnormally large|offset.+out of range|ERR_OUT_OF_RANGE/i.test(msg);
 }
 
 function readVarIntSafe(buf) {
@@ -666,9 +670,54 @@ class BotManager extends EventEmitter {
     bot.once('end', restore);
   }
 
-  // Tek bir gelen packet frame'inin NBT/dizi semasi sunucuyla uyusmadiginda
-  // minecraft-protocol o frame'i zaten kuyruktan cikarip sonraki frame'e
-  // devam eder. Bunu fatal bot hatasi gibi kullaniciya gostermek gereksizdir.
+  // FullPacketParser normalde cb(error) cagirir. Node Transform bu noktada
+  // kendini kapattigi icin client.js'in ayni parser'i tekrar pipe etmesi gercek
+  // bir kurtarma degildir: giden chat calisir ama gelen paketler durur ve
+  // 60 sn sonra "client timed out" olur. Parser'i daha hata olusmadan sarip
+  // play/configuration uyumsuzlugunu bos bir yerel pakete ceviriyoruz.
+  // Boylece transform stream yasamaya ve sonraki frame'leri okumaya devam eder.
+  installProtocolCompatibility(client) {
+    if (!client) return;
+    const patchCurrentParser = () => {
+      const parser = client.deserializer;
+      if (!parser || parser.__kbCompatWrapped || typeof parser.parsePacketBuffer !== 'function') return;
+      const original = parser.parsePacketBuffer.bind(parser);
+      const self = this;
+      parser.parsePacketBuffer = function compatibleParse(buffer) {
+        try {
+          return original(buffer);
+        } catch (err) {
+          // Login/auth paketindeki bir hata fatal kalir. Oyun ve configuration
+          // paketleri ise splitter/decompressor tarafindan zaten tek ve tam bir
+          // frame olarak verilir; bu frame'i atlamak sonrakinin sinirini bozmaz.
+          const state = String(client.state || '').toLowerCase();
+          if (state !== 'play' && state !== 'configuration') throw err;
+          try {
+            err.__kbInboundParser = true;
+            err.buffer = Buffer.isBuffer(buffer) ? buffer : null;
+          } catch (_) {}
+          self.handleRecoverableProtocolError(err, client);
+          const raw = Buffer.isBuffer(buffer) ? buffer : Buffer.alloc(0);
+          return {
+            data: { name: 'kb_compat_skip', params: {} },
+            metadata: { size: raw.length },
+            buffer: raw,
+            fullBuffer: raw
+          };
+        }
+      };
+      parser.__kbCompatWrapped = true;
+    };
+
+    patchCurrentParser();
+    if (!client.__kbCompatStateHook && typeof client.on === 'function') {
+      client.__kbCompatStateHook = true;
+      // Her login/configuration/play gecisinde minecraft-protocol yeni bir
+      // deserializer olusturur. state olayi yeni nesne hazirken yayilir.
+      client.on('state', patchCurrentParser);
+    }
+  }
+
   // Ayni Error once client, sonra bot emitter'ina gelebilecegi icin nesneye
   // isaret koyup sayaci yalnizca bir kez artiriyoruz.
   handleRecoverableProtocolError(err, client) {
@@ -698,7 +747,8 @@ class BotManager extends EventEmitter {
     this.traceIn = [];
     const client = bot._client;
     if (!client || client.__traced) return;
-    const skipIn = /^(position|entity|update_time|chunk|light|world|map_chunk|rel_entity|entity_|multi_block|block_change|player_info|update_health|teleport|keep_alive|ping|sound|particle|animation|collect|spawn_|held_item|set_slot|window_items|advancements|scoreboard|team|tab_complete|declare_commands|bundle_delimiter|set_ticking_state|step_tick|game_state_change|abilities|entity_velocity|entity_metadata|damage_event|hurt_animation|move_entity)/;
+    this.installProtocolCompatibility(client);
+    const skipIn = /^(kb_compat_skip|position|entity|update_time|chunk|light|world|map_chunk|rel_entity|entity_|multi_block|block_change|player_info|update_health|teleport|keep_alive|ping|sound|particle|animation|collect|spawn_|held_item|set_slot|window_items|advancements|scoreboard|team|tab_complete|declare_commands|bundle_delimiter|set_ticking_state|step_tick|game_state_change|abilities|entity_velocity|entity_metadata|damage_event|hurt_animation|move_entity)/;
     this.protoErrors = 0;
     client.on('error', (err) => {
       if (this.handleRecoverableProtocolError(err, client)) return;
@@ -1278,6 +1328,16 @@ class BotManager extends EventEmitter {
   // Sunucu restart atsa da, auto reconnect olsa da bu zincir bastan kurulur.
   runJoinChain(bot, why) {
     if (!bot) return;
+    // Lobi girisi sirasinda /login sonrasi gelen respawn/world-change olayi,
+    // calisan zinciri cancel edip siradaki /gir skyblock-spawn komutunu bazen
+    // yok ediyordu. Mevcut zincir tamamlanana kadar ayni bot icin koru.
+    if (why === 'world-change' && this.joinMessages &&
+        typeof this.joinMessages.isActive === 'function' && this.joinMessages.isActive(bot)) {
+      this.logger.info(this.logger.L(
+        'Dünya değişti; çalışan giriş komutu sırası korunuyor.',
+        'World changed; preserving the active join-command sequence.'));
+      return;
+    }
     const t = this.cfg.toggles || {};
     const f = this.farmerCfg();
     const ms = this.spawnerCfg();

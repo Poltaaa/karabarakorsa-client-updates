@@ -81,7 +81,7 @@ contextBridge.exposeInMainWorld('api', {
   diag: (msg) => ipcRenderer.invoke('diag', msg),
   on: (channel, cb) => {
     const allowed = ['log', 'status', 'chat', 'metrics', 'spam-state', 'macro-state', 'spawner-state', 'autosell-state', 'msa-done', 'notice',
-      'win-state', 'dialog', 'dialog-close', 'screen-open', 'screen-close', 'config-changed', 'slots', 'refresh',
+      'win-state', 'dialog', 'dialog-close', 'screen-open', 'screen-close', 'config-changed', 'slots', 'refresh', 'tor-state',
       'update-state', 'update-progress', 'update-downloaded', 'update-error'];
     if (!allowed.includes(channel)) return () => {};
     const handler = (_e, data) => cb(data);

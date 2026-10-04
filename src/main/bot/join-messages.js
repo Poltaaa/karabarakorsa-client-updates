@@ -14,12 +14,20 @@ class JoinMessages {
     this.timers = [];
     this.cancelled = false;
     this.plan = [];
+    this.pending = 0;
+    this.activeBot = null;
   }
 
   cancel() {
     this.cancelled = true;
     this.timers.forEach(clearTimeout);
     this.timers = [];
+    this.pending = 0;
+    this.activeBot = null;
+  }
+
+  isActive(bot) {
+    return !this.cancelled && this.pending > 0 && (!bot || this.activeBot === bot);
   }
 
   // Zinciri kurar. extra = { at, delay, label, run }  (at: 1..n+1, 0 = en son)
@@ -63,6 +71,8 @@ class JoinMessages {
     }));
     if (!list.length) return { count: 0, total: 0 };
 
+    this.pending = list.length;
+    this.activeBot = bot;
     let acc = 0;
     list.forEach((s, i) => {
       acc += s.delay * 1000;
@@ -82,6 +92,12 @@ class JoinMessages {
           }
         } catch (e) {
           this.logger.error('Join step error: ' + (e && e.message ? e.message : e));
+        } finally {
+          this.pending = Math.max(0, this.pending - 1);
+          if (!this.pending) {
+            this.activeBot = null;
+            this.timers = [];
+          }
         }
       }, acc);
       this.timers.push(t);

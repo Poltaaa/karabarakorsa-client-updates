@@ -1,8 +1,8 @@
 {
   "_aciklama": "Bu dosyayi herkesin erisebilecegi bir adrese koy (GitHub raw, kendi sitesi, Gist...). Adresini uygulamada AYARLAR > GUNCELLEME > 'Guncelleme adresi' alanina yaz. Yeni surum cikardiginda sadece bu dosyayi guncelle: herkesin clientinde sag ustte GUNCELLE tusu cikar.",
-  "version": "1.15.15",
+  "version": "1.15.16",
   "date": "2026-09-19",
   "notes": "• SkyBlock protokol uyumluluğu\n• Auto Sell kilitlenme düzeltmesi\n• Spawner özellikleri deneme sürecinde kapalı",
-  "url": "https://ornek.com/indir/Karabarakorsa AFK Client Setup 1.15.15.exe",
+  "url": "https://ornek.com/indir/Karabarakorsa AFK Client Setup 1.15.16.exe",
   "page": "https://ornek.com/surumler"
 }

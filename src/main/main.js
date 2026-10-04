@@ -501,6 +501,7 @@ app.whenReady().then(async () => {
   migrateUserData();
   store = new Store();
   tor = new TorController(logger);
+  tor.on('state', (st) => send('tor-state', liveVpnStatus(st)));
   logger.setLang(store.get().settings.language);
   const authDir = path.join(app.getPath('userData'), 'auth-cache');
   if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
@@ -514,7 +515,16 @@ app.whenReady().then(async () => {
   createTray();
   startMetrics();
   startStatePump();
-  if (store.get().tor && store.get().tor.enabled === true && store.get().tor.connectionEnabled === true) { try { await tor.start({ countries: store.get().tor.countries || [], strictNodes: !!store.get().tor.strictNodes }); } catch (e) { logger.warn('[VPN] ' + e.message); store.patch({ tor: { enabled: false } }); } }
+  if (store.get().tor && store.get().tor.enabled === true && store.get().tor.connectionEnabled === true) {
+    try {
+      await tor.start({ countries: store.get().tor.countries || [], strictNodes: !!store.get().tor.strictNodes });
+      send('tor-state', liveVpnStatus());
+    } catch (e) {
+      logger.warn('[VPN] ' + e.message);
+      store.patch({ tor: { enabled: false, connectionEnabled: false } });
+      send('tor-state', liveVpnStatus());
+    }
+  }
   applyAutoLaunch(store.get().settings.startWithWindows);
   writeDiag(`${APP_NAME} ${app.getVersion()} started`);   // KAYITLAR acilista bos kalsin
   autoConnectStartupAccounts();
@@ -595,6 +605,21 @@ function safeConfig() {
   copy.dialogs.hasPassword = !!(cfg.dialogs && cfg.dialogs.password);
   copy.dialogs.password = '';
   return copy;
+}
+
+// Kalici ac/kapa ayari ile gercek VPN surecini tek, yetkili durumda birlestir.
+// Renderer eski bir config kopyasina bakarak ON/OFF gostermesin.
+function liveVpnStatus(runtime) {
+  const saved = (store && store.get().tor) || {};
+  const st = runtime || (tor ? tor.status() : { running: false });
+  const enabled = saved.enabled === true;
+  const connectionEnabled = saved.connectionEnabled === true;
+  return {
+    ...st,
+    enabled,
+    connectionEnabled,
+    active: enabled && connectionEnabled && !!st.running
+  };
 }
 
 // Bota giden kopya: sifreler cozulur
@@ -707,11 +732,46 @@ function pushConfigToSessions() {
   });
 }
 
-ipcMain.handle('tor:status', () => tor ? tor.status() : { running: false });
-ipcMain.handle('tor:start', async (_e, opts) => { try { const st = await tor.start(opts || {}); store.patch({ tor: { enabled: true, connectionEnabled: true, country: st.country, countries: String(st.country || '').split(',').filter(Boolean) } }); return { ok: true, status: st }; } catch (e) { logger.error(e.message); return { ok: false, error: e.message }; } });
-ipcMain.handle('tor:stop', () => { const st = tor.stop(); store.patch({ tor: { enabled: false, connectionEnabled: false } }); pushConfigToSessions(); return { ok: true, status: st }; });
-ipcMain.handle('tor:new-identity', async () => { if (!store.get().tor || store.get().tor.enabled !== true || store.get().tor.connectionEnabled !== true) return { ok: false, error: 'VPN kapalı.' }; try { return { ok: true, status: await tor.newIdentity() }; } catch (e) { return { ok: false, error: e.message }; } });
-ipcMain.handle('tor:set-country', async (_e, payload) => { try { const x = payload || {}; const st = await tor.setCountry(x.countries || [], !!x.strictNodes); store.patch({ tor: { countries: x.countries || [], country: st.country, strictNodes: !!x.strictNodes } }); return { ok: true, status: st }; } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('tor:status', () => liveVpnStatus());
+ipcMain.handle('tor:start', async (_e, opts) => {
+  try {
+    const st = await tor.start(opts || {});
+    store.patch({ tor: { enabled: true, connectionEnabled: true, country: st.country, countries: String(st.country || '').split(',').filter(Boolean) } });
+    const status = liveVpnStatus(st);
+    send('tor-state', status);
+    return { ok: true, status };
+  } catch (e) {
+    logger.error(e.message);
+    return { ok: false, error: e.message };
+  }
+});
+ipcMain.handle('tor:stop', () => {
+  const st = tor.stop();
+  store.patch({ tor: { enabled: false, connectionEnabled: false } });
+  pushConfigToSessions();
+  const status = liveVpnStatus(st);
+  send('tor-state', status);
+  return { ok: true, status };
+});
+ipcMain.handle('tor:new-identity', async () => {
+  if (!store.get().tor || store.get().tor.enabled !== true || store.get().tor.connectionEnabled !== true) return { ok: false, error: 'VPN kapalı.' };
+  try {
+    const st = await tor.newIdentity();
+    const status = liveVpnStatus(st);
+    send('tor-state', status);
+    return { ok: true, status };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('tor:set-country', async (_e, payload) => {
+  try {
+    const x = payload || {};
+    const st = await tor.setCountry(x.countries || [], !!x.strictNodes);
+    store.patch({ tor: { countries: x.countries || [], country: st.country, strictNodes: !!x.strictNodes } });
+    const status = liveVpnStatus(st);
+    send('tor-state', status);
+    return { ok: true, status };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
 
 ipcMain.handle('config:get', () => safeConfig());
 
