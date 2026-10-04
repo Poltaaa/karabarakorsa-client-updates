@@ -37,6 +37,8 @@ class AutoSell {
     this.items = 0;
     this.nextAt = 0;
     this.ownedWindow = null;
+    this.cycleStartedAt = 0;
+    this.captureWindows = false;
     this.onState = null;
     this.lastNoChestLog = 0;
   }
@@ -118,6 +120,8 @@ class AutoSell {
     const wasRunning = this.running;
     this.running = false;
     this.nextAt = 0;
+    this.captureWindows = false;
+    this.cycleStartedAt = 0;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.closeOwnedWindow();
@@ -141,13 +145,23 @@ class AutoSell {
   async loop() {
     if (!this.running || this.busy || !this.bot) return;
     this.busy = true;
+    this.cycleStartedAt = Date.now();
     this.emitState();
     try {
-      await this.runOnce();
+      // Her alt adim kendi zaman asimina sahiptir. Bu dis koruma da
+      // beklenmeyen bir kutuphane davranisinin donguyu saatlerce kilitlemesini
+      // engeller.
+      await this.withTimeout(this.runOnce(), 15000);
     } catch (e) {
-      this.warn(this.L('tur hatası: ', 'cycle error: ') + (e && e.message ? e.message : e));
+      const timedOut = e && e.message === '__timeout__';
+      this.warn(timedOut
+        ? this.L('tur zaman aşımına uğradı; sandık zorla kapatılıp devam edilecek',
+          'cycle timed out; the chest will be force-closed and the loop will continue')
+        : this.L('tur hatası: ', 'cycle error: ') + (e && e.message ? e.message : e));
     } finally {
+      await this.closeOwnedWindow(true);
       this.busy = false;
+      this.cycleStartedAt = 0;
       this.emitState();
       if (this.running) this.schedule();
     }
@@ -195,16 +209,63 @@ class AutoSell {
     });
   }
 
-  async closeOwnedWindow() {
+  trackOwnedWindow(win) {
+    if (!win) return null;
+    try { win.__autoSellOwned = true; } catch (_) {}
+    this.ownedWindow = win;
+    return win;
+  }
+
+  async closeOwnedWindow(force) {
     const bot = this.bot;
-    const win = this.ownedWindow;
+    let win = this.ownedWindow;
+    // Bazi sunucu eklentileri sandik acildiktan sonra ayni ekranin yerine
+    // ikinci bir ozel pencere acar. Ilk nesneye takili kalmak yerine Auto
+    // Sell turunda acilan en son pencereyi kapat.
+    if (bot && bot.currentWindow &&
+        (bot.currentWindow === win || bot.currentWindow.__autoSellOwned)) {
+      win = bot.currentWindow;
+    }
     this.ownedWindow = null;
-    if (!bot || !win || bot.currentWindow !== win) return;
-    try { await bot.closeWindow(win); } catch (_) {}
+    if (!bot || !win) return true;
+    try { win.__autoSellOwned = true; } catch (_) {}
+
+    try {
+      await this.withTimeout(bot.closeWindow(win), 800);
+    } catch (_) {}
+    await wait(80);
+
+    if (bot.currentWindow === win) {
+      // closeWindow nadiren bir transaction cevabini beklerken yerel pencereyi
+      // acik birakabiliyor. Sunucuya kapatma paketini dogrudan gonder ve
+      // Mineflayer'in yerel pencere durumunu da serbest birak.
+      try {
+        if (bot._client && typeof bot._client.write === 'function') {
+          bot._client.write('close_window', { windowId: win.id });
+        }
+      } catch (_) {}
+      try {
+        if (typeof win.close === 'function') win.close();
+      } catch (_) {}
+      try {
+        if (bot.currentWindow === win) bot.currentWindow = null;
+      } catch (_) {}
+      await wait(40);
+    }
+    return bot.currentWindow !== win;
   }
 
   async openNearestChest() {
     const bot = this.bot;
+    if (bot.currentWindow) {
+      if (bot.currentWindow.__autoSellOwned) {
+        this.warn(this.L(
+          'önceki turdan açık kalan sandık kurtarılıyor',
+          'recovering a chest left open by the previous cycle'
+        ));
+        await this.closeOwnedWindow(true);
+      }
+    }
     if (bot.currentWindow) {
       // Baska bir ekran aciksa kullanicinin/makronun ekranini kapatip bozma.
       this.warn(this.L(
@@ -245,10 +306,17 @@ class AutoSell {
       if (bot.setControlState) bot.setControlState('sneak', false);
       await wait(50);
       const target = near.pos.offset(0.5, 0.5, 0.5);
-      await bot.lookAt(target, true);
+      await this.withTimeout(bot.lookAt(target, true), 1500);
       await wait(120);
+      this.captureWindows = true;
       const pending = this.waitWindow(3000);
-      await bot.activateBlock(block);
+      try {
+        await this.withTimeout(bot.activateBlock(block), 1800);
+      } catch (e) {
+        // Bazi eklenti sandiklarinda activateBlock promise'i donmese de
+        // windowOpen paketi gelir. Asagidaki pencere bekleyicisi karar versin.
+        if (!e || e.message !== '__timeout__') throw e;
+      }
       win = await pending;
     } finally {
       if (wasSneaking && bot.setControlState) bot.setControlState('sneak', true);
@@ -257,8 +325,14 @@ class AutoSell {
       this.warn(this.L('sandık ekranı açılmadı', 'the chest screen did not open'));
       return null;
     }
-    this.ownedWindow = win;
-    await wait(80);
+    // Bekleme sirasinda eklenti pencereyi degistirdiyse en guncelini kullan.
+    if (bot.currentWindow) win = bot.currentWindow;
+    this.trackOwnedWindow(win);
+    // Eklentinin ilk sandigi ikinci bir ozel pencereyle degistirmesi icin
+    // kisa bir yakalama araligi birak.
+    await wait(120);
+    if (bot.currentWindow) win = this.trackOwnedWindow(bot.currentWindow);
+    this.captureWindows = false;
     return win;
   }
 
@@ -295,8 +369,17 @@ class AutoSell {
     let stacks = 0;
     let items = 0;
     let full = false;
+    let stalled = false;
 
     for (let slot = 0; slot < chestSlots && this.running; slot++) {
+      if (this.cycleStartedAt && Date.now() - this.cycleStartedAt > 9000) {
+        stalled = true;
+        this.warn(this.L(
+          'sandık aktarımı güvenli süreyi aştı; tur sıfırlanıyor',
+          'chest transfer exceeded the safe time; resetting this cycle'
+        ));
+        break;
+      }
       if (!bot.currentWindow || bot.currentWindow !== win) break;
       const item = win.slots && win.slots[slot];
       if (!item) continue;
@@ -309,12 +392,21 @@ class AutoSell {
         // SHIFT+SOL: bir yigini tek tikta sandiktan envantere yollar.
         await this.withTimeout(bot.clickWindow(slot, 0, 1), 1200);
       } catch (e) {
-        if (!e || e.message !== '__timeout__') {
+        if (e && e.message === '__timeout__') {
+          // Cevapsiz kalan bir clickWindow promise'inden sonra yeni tiklar
+          // yollamak transaction kuyrugunu kilitleyebilir. Turu hemen kesip
+          // pencereyi kapat; sonraki zamanlayici temiz bir tur baslatir.
+          stalled = true;
+          this.warn(this.L(
+            `kare #${slot} zaman aşımına uğradı; tur güvenli şekilde sıfırlanıyor`,
+            `slot #${slot} timed out; safely resetting this cycle`
+          ));
+          break;
+        } else {
           this.warn(this.L(`kare #${slot} taşınamadı: `, `slot #${slot} could not be moved: `) +
             (e && e.message ? e.message : e));
           continue;
         }
-        // Paket gitti; yuksek pingde slot guncellemesi gecikebilir.
       }
       await wait(25);
       const afterItem = win.slots && win.slots[slot];
@@ -325,22 +417,30 @@ class AutoSell {
         items += moved || before;
       }
     }
-    return { stacks, items, full };
+    return { stacks, items, full, stalled };
   }
 
   async runOnce() {
     const activeBot = this.bot;
     if (activeBot) activeBot.__autoSellInteracting = true;
+    const onWindowOpen = (win) => {
+      // activateBlock sonrasinda gelen ikinci/yenilenen eklenti pencerelerini
+      // de bu tura ait say. Boylece finally her durumda dogru ekrani kapatir.
+      if (this.captureWindows && activeBot === this.bot) this.trackOwnedWindow(win);
+    };
+    if (activeBot && typeof activeBot.on === 'function') {
+      activeBot.on('windowOpen', onWindowOpen);
+    }
     try {
       const win = await this.openNearestChest();
       if (!win || !this.running) return;
 
       const moved = await this.transferAll(win);
-      await this.closeOwnedWindow();
+      await this.closeOwnedWindow(true);
       await wait(80);
       if (!this.running) return;
 
-      if (moved.stacks > 0) {
+      if (moved.stacks > 0 && !moved.stalled) {
         this.bot.chat('/sellall');
         this.cycles += 1;
         this.stacks += moved.stacks;
@@ -349,13 +449,22 @@ class AutoSell {
           `${moved.stacks} yığın / ${moved.items} eşya alındı${moved.full ? ' · envanter doldu' : ''} · /sellall gönderildi · tur ${this.cycles}`,
           `${moved.stacks} stacks / ${moved.items} items taken${moved.full ? ' · inventory full' : ''} · /sellall sent · cycle ${this.cycles}`
         ));
+      } else if (moved.stalled) {
+        this.info(this.L(
+          'sandık işlemi yanıt vermedi; satış yapılmadan sonraki tur beklenecek',
+          'the chest transaction stopped responding; waiting for the next cycle without selling'
+        ));
       } else {
         this.info(this.L('sandıkta alınabilir eşya yok; /sellall gönderilmedi', 'no transferable items in the chest; /sellall was not sent'));
       }
       this.emitState();
     } finally {
+      this.captureWindows = false;
+      if (activeBot && typeof activeBot.removeListener === 'function') {
+        activeBot.removeListener('windowOpen', onWindowOpen);
+      }
       // Hata veya DURDUR olsa bile acik sandik sonraki turlari kilitlemesin.
-      await this.closeOwnedWindow();
+      await this.closeOwnedWindow(true);
       if (activeBot) activeBot.__autoSellInteracting = false;
     }
   }

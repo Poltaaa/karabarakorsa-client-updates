@@ -1,7 +1,7 @@
 {
   "name": "karabarakorsa-client",
   "productName": "Karabarakorsa AFK Client",
-  "version": "1.15.14",
+  "version": "1.15.15",
   "description": "Karabarakorsa AFK Client - Professional Minecraft AFK Client for Windows",
   "main": "src/main/main.js",
   "author": "Karabarakorsa",
@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "https-proxy-agent": "^7.0.5",
-    "minecraft-protocol": "^1.47.0",
-    "mineflayer": "^4.20.1",
+    "minecraft-protocol": "1.68.0",
+    "mineflayer": "4.39.0",
     "msmc": "^5.0.5",
     "prismarine-auth": "^2.5.0",
     "socks": "^2.8.3"

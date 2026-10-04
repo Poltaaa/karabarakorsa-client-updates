@@ -25,6 +25,56 @@ const ResourcePack = require('./respack');
 const { buildConnect } = require('./proxy');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Proxy arkasindaki bazi SkyBlock sunuculari, vanilla istemcinin tolere ettigi
+// fakat Prismarine protokol semasinda NBT/dizi alaniyla cakisan ek paketler
+// gonderebiliyor. minecraft-protocol her paketi ayri frame olarak cozer; bu
+// nedenle hatali tek frame'i atlamak sonraki paketlerin sinirini bozmaz.
+function isRecoverableIncomingParseError(err) {
+  const msg = String(err && err.message ? err.message : err || '');
+  return /Parse error for (?:play|configuration)\.toClient/i.test(msg) &&
+    /array size is abnormally large/i.test(msg);
+}
+
+function readVarIntSafe(buf) {
+  if (!Buffer.isBuffer(buf) || !buf.length) return null;
+  let value = 0;
+  let shift = 0;
+  for (let i = 0; i < Math.min(buf.length, 5); i++) {
+    const b = buf[i];
+    value |= (b & 0x7f) << shift;
+    if ((b & 0x80) === 0) return { value: value >>> 0, size: i + 1 };
+    shift += 7;
+  }
+  return null;
+}
+
+function incomingPacketInfo(client, err) {
+  const buf = err && Buffer.isBuffer(err.buffer) ? err.buffer : null;
+  const head = readVarIntSafe(buf);
+  const id = head ? head.value : null;
+  let name = '';
+  try {
+    const version = client && client.version;
+    const state = String((client && client.state) || 'play').toLowerCase();
+    const mcData = require('minecraft-data')(version);
+    const packet = mcData && mcData.protocol && mcData.protocol[state] &&
+      mcData.protocol[state].toClient && mcData.protocol[state].toClient.types &&
+      mcData.protocol[state].toClient.types.packet;
+    const fields = Array.isArray(packet) && packet[1];
+    const nameField = Array.isArray(fields) && fields.find((x) => x && x.name === 'name');
+    const mappings = nameField && Array.isArray(nameField.type) && nameField.type[1] &&
+      nameField.type[1].mappings;
+    if (mappings && id !== null) {
+      name = mappings['0x' + id.toString(16).padStart(2, '0')] || mappings[String(id)] || '';
+    }
+  } catch (_) {}
+  return {
+    id,
+    name,
+    bytes: buf ? buf.length : 0
+  };
+}
+
 function reconcileChatSpans(flat, spans) {
   const text = String(flat || '');
   const list = Array.isArray(spans) ? spans.filter((s) => s && s.t) : [];
@@ -92,6 +142,8 @@ class BotManager extends EventEmitter {
     this.traceIn = [];
     this.respack = new ResourcePack(logger);
     this.packAttempt = 0;
+    this.protocolSkipped = 0;
+    this.protocolSkipLastLog = 0;
   }
 
   isOnline() { return this.status === 'ONLINE'; }
@@ -156,6 +208,8 @@ class BotManager extends EventEmitter {
     this.packAttempt = 0;
     this.forcePackMode = null;
     this.needPackRetry = false;
+    this.protocolSkipped = 0;
+    this.protocolSkipLastLog = 0;
     this.transferRetries = 0;
 
     const host = String(cfg.connection.host || '').trim();
@@ -192,7 +246,9 @@ class BotManager extends EventEmitter {
       port: Number(c.port) || 25565,
       username: acc.username,
       version: c.version && c.version !== 'auto' ? c.version : false,
-      hideErrors: false,        // protokol hatalari loglara dussun
+      // Ayrıştırıcıdaki tek-frame uyumsuzluklarını aşağıdaki koruma katmanı
+      // yönetir; kütüphanenin ham stack/console gürültüsünü gösterme.
+      hideErrors: true,
       physicsEnabled: !!t.physics,
       checkTimeoutInterval: 60 * 1000,
       // Imzali sohbet bazi sunucu/proxy kurulumlarinda hata veriyor
@@ -517,6 +573,10 @@ class BotManager extends EventEmitter {
     });
 
     bot.on('error', (err) => {
+      // SkyBlock/proxy kaynakli tek paket sema uyumsuzlugu fatal degildir.
+      // Deserializer hatali frame'i atip sonraki pakete devam eder; kirmizi
+      // hata bildirimi ve lastError ile calisan baglantiyi bozuk gostermeyiz.
+      if (this.handleRecoverableProtocolError(err, bot && bot._client)) return;
       const map = {
         ENOTFOUND: this.logger.L('Sunucu adresi bulunamadı. Server IP yanlış olabilir.', 'Server address not found. The server IP may be wrong.'),
         ECONNREFUSED: this.logger.L('Sunucu bağlantıyı reddetti. Port yanlış olabilir veya sunucu kapalı.', 'The server refused the connection. The port may be wrong or the server is offline.'),
@@ -606,6 +666,32 @@ class BotManager extends EventEmitter {
     bot.once('end', restore);
   }
 
+  // Tek bir gelen packet frame'inin NBT/dizi semasi sunucuyla uyusmadiginda
+  // minecraft-protocol o frame'i zaten kuyruktan cikarip sonraki frame'e
+  // devam eder. Bunu fatal bot hatasi gibi kullaniciya gostermek gereksizdir.
+  // Ayni Error once client, sonra bot emitter'ina gelebilecegi icin nesneye
+  // isaret koyup sayaci yalnizca bir kez artiriyoruz.
+  handleRecoverableProtocolError(err, client) {
+    if (!isRecoverableIncomingParseError(err)) return false;
+    if (err && err.__kbProtocolRecovered) return true;
+    try { err.__kbProtocolRecovered = true; } catch (_) {}
+
+    this.protocolSkipped = (this.protocolSkipped || 0) + 1;
+    const now = Date.now();
+    // Ilkini hemen, devam edenleri en fazla 30 sn'de bir yaz. Kirmizi hata/toast
+    // yoktur; baglanti ve otomasyon calismaya devam eder.
+    if (this.protocolSkipped === 1 || now - (this.protocolSkipLastLog || 0) >= 30000) {
+      this.protocolSkipLastLog = now;
+      const info = incomingPacketInfo(client, err);
+      const label = info.name || (info.id === null ? '?' : '0x' + info.id.toString(16));
+      this.logger.info(this.logger.L(
+        `SkyBlock uyumluluk koruması: desteklenmeyen ek paket atlandı; bağlantı devam ediyor (${label}${info.bytes ? `, ${info.bytes} bayt` : ''}, toplam ${this.protocolSkipped}).`,
+        `SkyBlock compatibility guard: an unsupported extra packet was skipped; the connection continues (${label}${info.bytes ? `, ${info.bytes} bytes` : ''}, total ${this.protocolSkipped}).`
+      ));
+    }
+    return true;
+  }
+
   // Sunucu bizi atarsa hangi paketin sebep oldugunu gorebilmek icin son gonderilenler tutulur
   traceWrites(bot) {
     this.trace = [];
@@ -615,6 +701,7 @@ class BotManager extends EventEmitter {
     const skipIn = /^(position|entity|update_time|chunk|light|world|map_chunk|rel_entity|entity_|multi_block|block_change|player_info|update_health|teleport|keep_alive|ping|sound|particle|animation|collect|spawn_|held_item|set_slot|window_items|advancements|scoreboard|team|tab_complete|declare_commands|bundle_delimiter|set_ticking_state|step_tick|game_state_change|abilities|entity_velocity|entity_metadata|damage_event|hurt_animation|move_entity)/;
     this.protoErrors = 0;
     client.on('error', (err) => {
+      if (this.handleRecoverableProtocolError(err, client)) return;
       if (this.protoErrors++ > 8) return;
       this.logger.warn(this.logger.L('Protokol hatası: ', 'Protocol error: ') + (err && err.message ? err.message : String(err)));
     });

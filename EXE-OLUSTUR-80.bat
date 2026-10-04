@@ -1,5 +1,5 @@
 @echo off
-title Karabarakorsa AFK Client v1.15.14 - Derleme (paket 77)
+title Karabarakorsa AFK Client v1.15.15 - Derleme (paket 80)
 cd /d "%~dp0"
 where node >nul 2>nul || (echo [HATA] Once Node.js LTS kurun: https://nodejs.org & pause & exit /b)
 call npm ci

@@ -1,5 +1,27 @@
 # Değişiklik Günlüğü
 
+## 1.15.15 · Paket 80 · GitHub yayın sürümü
+
+- Uygulama sürümü tüm yayın noktalarında **v1.15.15** olarak yükseltildi: paket metadata’sı, kilit dosyası, kenar çubuğu, başlatma/derleme dosyaları, README ve güncelleme örneği aynı sürüme getirildi.
+- SkyBlock protokol uyumluluk koruması ve Auto Sell dayanıklılık düzeltmesi bu yayın sürümüne dahil edildi.
+- GitHub dağıtımı için kök dosya adları `BASLAT-80.bat`, `EXE-OLUSTUR-80.bat` ve `diag-80.js` olarak güncellendi.
+
+## 1.15.14 · Paket 79 · SkyBlock protokol uyumluluğu
+
+- Proxy arkasındaki bazı SkyBlock sunucularında görülen `array size is abnormally large` gelen-paket ayrıştırma hatası için uyumluluk koruması eklendi.
+- Hatalı tek paket frame’i güvenli biçimde atlanıyor; bağlantı, giriş komutları ve otomasyon çalışmaya devam ediyor. Bu durum artık bağlantıyı bozan kırmızı hata/toast olarak gösterilmiyor.
+- Koruma ilk olayı ve atlanan paket sayısını Kayıtlar’a tek bir bilgi satırı olarak yazıyor; tekrar eden aynı hata logları 30 saniyede birleştiriliyor.
+- Paket kimliği mümkünse Minecraft protokol şemasından çözümlenip bilgi satırına ekleniyor; böylece ileride sunucuya özel şema düzeltmesi gerekirse teşhis verisi hazır oluyor.
+- `minecraft-protocol` **1.68.0** ve Mineflayer **4.39.0** sürümlerine sabitlendi; farklı bilgisayarlarda eski protokol kütüphanelerinin kurulması engellendi.
+
+## 1.15.14 · Paket 78 · Auto Sell dayanıklılık düzeltmesi
+
+- Auto Sell’in nadiren sandığı açık bırakıp saatlerce devam etmemesine yol açan pencere/transaction kilidi giderildi.
+- Sandık tıklaması yanıt vermezse yeni tıklamalar yığılmıyor; tur güvenli biçimde kesiliyor, sandık zorla kapatılıyor ve ayarlanan süreden sonra temiz bir tur başlıyor.
+- Eklenti sunucularının ilk sandık penceresini ikinci bir özel pencereyle değiştirmesi desteklendi; Auto Sell artık açtığı en güncel pencereyi takip edip kapatıyor.
+- Bakma, etkileşim, eşya taşıma, pencere kapatma ve bütün tur için zaman aşımı korumaları eklendi. Bir hata Auto Sell döngüsünü kalıcı olarak durduramıyor.
+- Kullanıcının veya başka bir özelliğin açtığı alakasız ekranlar Auto Sell’e ait sayılmıyor ve zorla kapatılmıyor.
+
 ## 1.15.14 · Paket 77
 
 - **Spawner AFK** ve **Spawner Koruma** deneme süreci tamamlanana kadar zorunlu olarak kapatıldı; eski ayarlarda açık kayıtlı olsalar bile hiçbir hesapta veya bot motorunda çalışmazlar.
