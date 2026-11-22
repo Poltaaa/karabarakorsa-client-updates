@@ -15,6 +15,7 @@ const BotManager = require('./bot/bot-manager');
 const versions = require('./versions');
 const updater = require('./updater');
 const TorController = require('./tor-controller');
+const BUILD_INFO = require('./build-info');
 
 let win = null;
 let tray = null;
@@ -25,16 +26,17 @@ let quitting = false;
 let tor = null;
 
 const APP_NAME = 'Karabarakorsa AFK Client';
-// Paket 77: Deneme tamamlanana kadar bu iki özellik hem arayüzde hem çalışma
-// motorunda zorunlu olarak kapalıdır. Eski config'te açık görünseler bile
-// hiçbir hesaba uygulanmazlar.
-const FORCED_DISABLED_FEATURES = new Set(['macroSpawner', 'spawnerProtect']);
+// Spawner AFK deneme boyunca kilitli kalır. Spawner Koruma Paket 85 ile
+// yeniden açıldı; hesap seçimi ve çalışma durumu normal özellik akışındadır.
+const FORCED_DISABLED_FEATURES = new Set(['macroSpawner']);
 
 // Windows bildirimlerinde "electron.app..." yazmamasi icin uygulama kimligi
 app.setName(APP_NAME);
 try { app.setAppUserModelId('com.karabarakorsa.afkclient'); } catch (_) {}
-// Bellek: V8 yigini sinirli tutulur, GC daha sik calisir (akicilik bozulmaz)
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=256 --expose-gc');
+// Mineflayer dünya/chunk verisi oyun açılırken kısa sürede yüzlerce MB'a
+// çıkabilir. Eski 256 MB sınırı V8'i sürekli tam GC yapmaya zorluyor ve Electron
+// arayüzünü saniyelerce dondurabiliyordu. Kontrollü ama gerçekçi bir pay bırak.
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=768 --expose-gc');
 app.commandLine.appendSwitch('disable-features', 'MediaSessionService,HardwareMediaKeyHandling');
 
 // Dil: arayuzde secili dile gore ana surec metinleri
@@ -292,6 +294,7 @@ function wireSession(s) {
   b.on('spam-state', (a) => { send('spam-state', { slot: s.slot, active: a }); sendSlots(); });
   b.on('macro-state', (st) => { send('macro-state', Object.assign({ slot: s.slot }, st)); sendSlots(); });
   b.on('spawner-state', (st) => { send('spawner-state', Object.assign({ slot: s.slot }, st)); sendSlots(); });
+  b.on('autobuild-state', (st) => { send('autobuild-state', Object.assign({ slot: s.slot }, st)); });
   b.on('autosell-state', (st) => { send('autosell-state', Object.assign({ slot: s.slot }, st)); sendSlots(); });
   b.on('screen-open', (d) => send('screen-open', Object.assign({ slot: s.slot }, d || {})));
   b.on('screen-close', () => send('screen-close', { slot: s.slot }));
@@ -397,6 +400,8 @@ function disconnectAll() {
 // paylasilan sayfalari (DLL, font, GPU dokusu) her surecte tekrar saydigi icin
 // gercek kullanimin 2-3 katini gosteriyordu.
 let cpuLast = 0;
+const METRICS_CORES = Math.max(1, os.cpus().length);
+const METRICS_TOTAL_RAM = Math.round(os.totalmem() / 1024 / 1024);
 function stopMetrics() { if (metricsTimer) { clearInterval(metricsTimer); metricsTimer = null; } }
 function readMetrics() {
   let priv = 0;
@@ -415,14 +420,13 @@ function readMetrics() {
   // privateBytes Windows'ta gelir; gelmezse calisma kumesini kullaniriz
   let ram = priv || ws;
   if (!ram) { try { ram = Math.round(process.memoryUsage().rss / 1024); } catch (_) {} }
-  const cores = Math.max(1, os.cpus().length);
-  cpu = Math.min(100, cpu / cores);
+  cpu = Math.min(100, cpu / METRICS_CORES);
   // kucuk yumusatma: deger zipzip degil, akici gorunsun
   cpuLast = cpuLast ? cpuLast * 0.45 + cpu * 0.55 : cpu;
   return {
     cpu: Math.round(cpuLast * 10) / 10,
     ram: Math.round(ram / 1024),
-    totalRam: Math.round(os.totalmem() / 1024 / 1024)
+    totalRam: METRICS_TOTAL_RAM
   };
 }
 function startMetrics() {
@@ -434,16 +438,28 @@ function startMetrics() {
 }
 
 // --- Canli durum akisi -----------------------------------------------------
-// Bot durumu sadece degistiginde yayinlanirsa ping/sure arayuzde donuk kalir.
-// Bu yuzden aktif oturumun durumu saniyede bir tazelenir.
+// Poll cheaply for real changes; uptime already advances locally in renderer.
+// Do not trigger a full renderer status repaint for an unchanged second.
 let statePump = null;
+let lastPumpedStateSignature = '';
+function stateUiSignature(st) {
+  const copy = { ...st };
+  delete copy.uptime; // Renderer already has a cheap local uptime clock.
+  return JSON.stringify(copy);
+}
 function startStatePump() {
+  lastPumpedStateSignature = '';
   if (statePump) clearInterval(statePump);
   statePump = setInterval(() => {
     if (!win || win.isDestroyed() || !win.isVisible()) return;
     if (!sessions.length) return;
     const b = botBySlot(activeSlot) || (sessions[0] && sessions[0].bot);
-    if (b) win.webContents.send('status', Object.assign({ slot: activeSlot }, b.state()));
+    if (!b) return;
+    const payload = Object.assign({ slot: activeSlot }, b.state());
+    const sig = stateUiSignature(payload);
+    if (sig === lastPumpedStateSignature) return;
+    lastPumpedStateSignature = sig;
+    win.webContents.send('status', payload);
   }, 1000);
 }
 
@@ -499,10 +515,12 @@ function migrateUserData() {
 // ---------------------------------------------------------------------------
 app.whenReady().then(async () => {
   migrateUserData();
+  logger.enableDiagnostics(path.join(app.getPath('userData'),'logs'));
   store = new Store();
   tor = new TorController(logger);
   tor.on('state', (st) => send('tor-state', liveVpnStatus(st)));
   logger.setLang(store.get().settings.language);
+  logger.info(`Karabarakorsa v${app.getVersion()} · Paket ${BUILD_INFO.package}`);
   const authDir = path.join(app.getPath('userData'), 'auth-cache');
   if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
 
@@ -593,7 +611,14 @@ async function installLatestUpdate() {
 ipcMain.handle('update:state', () => updateInfo);
 ipcMain.handle('update:install', () => installLatestUpdate());
 
-app.on('before-quit', () => { quitting = true; disconnectAll(); if (tor) tor.stop(); store.saveNow(); });
+let diagnosticQuitDone=false;
+app.on('before-quit', event => {
+  quitting=true;disconnectAll();if(tor)tor.stop();store?.saveNow();
+  if(!diagnosticQuitDone&&logger.diagnostics){
+    event.preventDefault();diagnosticQuitDone=true;
+    logger.diagnostics.close().finally(()=>app.quit());
+  }
+});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 // ---------------------------- IPC -------------------------------------------
@@ -719,11 +744,17 @@ function configForAccount(accountId) {
     autoSell: { ...((base.macros && base.macros.autoSell) || {}), enabled: featOn(base, 'macroAutoSell', accountId) }
   };
   c.autoSpam = spamCfgFor(accountId, base);
-  // Paket 80: anahtar "en az bir hesapta" aciksa koruma BAĞLI TUM botlarda devreye
-  // girer. (Kullanici "mod acik = koruma acik" bekliyor; hesap secimi arayuzde
-  // durur ama korumayi sadece secili hesaplara kisitlamaz - aksi halde mod
-  // acikken kazmiyor, kapat-ac yapinca calisiyordu.)
-  c.spawnerProtect = { ...(base.spawnerProtect || {}), enabled: featEnabled(base, 'spawnerProtect') };
+  // Paket 85: koruma yalnızca hesap seçicide işaretlenen botta çalışır.
+  // Önceki genel özet tüm bağlı hesaplarda korumayı başlatıp alakasız
+  // sunucularda hareket/kazma denemelerine yol açabiliyordu.
+  c.spawnerProtect = {
+    ...(base.spawnerProtect || {}),
+    enabled: featOn(base, 'spawnerProtect', accountId)
+  };
+  // Spawner Koruma Bot Physics'i gizlice acmaz. Kullanici ayari OFF ise yakin
+  // spawnerlar yerinde kirilir, uzak hedeflere yurunmez. ChickenNW'de koruma
+  // acilinca fizigi zorla ON yapmak, hic kazma olmasa bile 15-20 sn sonra
+  // gx01 kick'ine yol acabiliyordu.
   return c;
 }
 function pushConfigToSessions() {
@@ -873,7 +904,7 @@ ipcMain.handle('chat:history', (_e, slot) => {
 ipcMain.handle('bot:ping', async (_e, payload) => {
   const c = store.get().connection;
   const anyBot = botBySlot(0) || new BotManager(logger.channel(0), botAuthDir);
-  const res = await anyBot.ping((payload && payload.host) || c.host, (payload && payload.port) || c.port);
+  const res = await anyBot.probeServer((payload && payload.host) || c.host, (payload && payload.port) || c.port);
   if (res && res.ok && res.version) {
     // "1.21.11" gibi bir surum adi cikarilmaya calisilir
     const m = String(res.version).match(/\d+\.\d+(?:\.\d+)?/);
@@ -889,6 +920,7 @@ ipcMain.handle('versions:list', () => versions.list());
 ipcMain.handle('app:info', () => ({
   name: APP_NAME,
   version: app.getVersion(),
+  build: BUILD_INFO.package,
   author: 'Poltaaa',
   configPath: path.join(app.getPath('userData'), 'config.json'),
   logPath: path.join(app.getPath('userData'), 'ui-error.log')
@@ -964,6 +996,32 @@ ipcMain.handle('spawner:stop', (_e, slot) => {
   return b ? b.stopMacroSpawner() : { ok: false, error: 'no_session' };
 });
 // Paket 76: En yakin sandiktan hizli toplama + /sellall dongusu
+ipcMain.handle('autobuild:catalog', (_e, slot) => {
+  const b = botBySlot(slot) || botBySlot();
+  if (b) return b.autoBuildCatalog();
+  try { return { ok: true, version: '1.20.1', blocks: require('./bot/auto-build').catalog(require('minecraft-data')('1.20.1')) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('autobuild:state', (_e, slot) => {
+  const b = botBySlot(slot); return b ? b.autoBuild.state() : { status: 'idle', total: '0', processed: '0', placed: '0', skipped: '0', inventory: 0 };
+});
+ipcMain.handle('autobuild:position', (_e, slot) => {
+  const b = botBySlot(slot), p = b?.bot?.entity?.position;
+  return p ? { ok: true, x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z) } : { ok: false, error: 'not_connected' };
+});
+ipcMain.handle('autobuild:preview', (_e, payload) => {
+  const b = botBySlot(payload?.slot);
+  return b?.bot ? b.autoBuild.preview(b.bot, payload?.spec || {}) : { ok: false, error: 'not_connected' };
+});
+ipcMain.handle('autobuild:auto-pass', (_e, payload) => {
+  const b=botBySlot(payload?.slot);return b?b.autoBuild.setAutoPass(payload?.enabled):{ok:false,error:'not_connected'};
+});
+ipcMain.handle('autobuild:start', (_e, payload) => {
+  const b = botBySlot(payload?.slot); return b ? b.startAutoBuild(payload?.spec || {}) : { ok: false, error: 'not_connected' };
+});
+for (const action of ['pause', 'resume', 'stop']) ipcMain.handle('autobuild:' + action, (_e, slot) => {
+  const b = botBySlot(slot); return b ? b.autoBuild[action]() : { ok: false, error: 'not_connected' };
+});
 ipcMain.handle('autosell:start', (_e, slot) => {
   const s = slot ? sessionBySlot(slot) : activeSession();
   if (!s) return { ok: false, error: 'no_session' };
@@ -993,6 +1051,11 @@ ipcMain.handle('bot:inventory-drop', async (_e, payload) => {
   const p = payload || {};
   const b = botBySlot(p.slot);
   return b ? b.inventoryAction(p.winSlot, p.action) : { ok: false, error: 'no_session' };
+});
+ipcMain.handle('bot:inventory-op', async (_e, payload) => {
+  const p = payload || {};
+  const b = botBySlot(p.session);
+  return b ? b.inventoryOperation(p.op || {}) : { ok: false, error: 'no_session' };
 });
 
 // --- Sunucu ekranlari (dialog) ----------------------------------------------

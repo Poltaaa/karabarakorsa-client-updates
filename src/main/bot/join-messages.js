@@ -6,7 +6,11 @@
 // adimi gibi calisabilir. Boylece sunucu restart atip bot yeniden girdiginde
 // once /login, sonra /is go ... ve sirasi gelince makro baslar.
 // ---------------------------------------------------------------------------
-const MASK = /(\/(?:login|l|register|reg)\s+)\S+/i;
+const SECRET_CMD = /^(\s*\/(?:login|gir|l|register|reg)\b)(.*)$/i;
+function maskSecretCommand(value) {
+  return String(value || '').replace(SECRET_CMD, (_all, command, tail) =>
+    command + tail.replace(/\S/g, '*'));
+}
 
 class JoinMessages {
   constructor(logger) {
@@ -67,7 +71,7 @@ class JoinMessages {
     this.plan = list.map((s, i) => ({
       no: i + 1,
       delay: s.delay,
-      text: s.kind === 'run' ? s.label : String(s.command).replace(MASK, '$1********')
+      text: s.kind === 'run' ? s.label : maskSecretCommand(s.command)
     }));
     if (!list.length) return { count: 0, total: 0 };
 
@@ -87,8 +91,8 @@ class JoinMessages {
           } else {
             bot.chat(s.command);
             this.logger.info(this.logger.L(
-              `Giriş komutu ${i + 1}/${list.length}: ${s.command.replace(MASK, '$1********')}`,
-              `Join command ${i + 1}/${list.length}: ${s.command.replace(MASK, '$1********')}`));
+              `Giriş komutu ${i + 1}/${list.length}: ${maskSecretCommand(s.command)}`,
+              `Join command ${i + 1}/${list.length}: ${maskSecretCommand(s.command)}`));
           }
         } catch (e) {
           this.logger.error('Join step error: ' + (e && e.message ? e.message : e));

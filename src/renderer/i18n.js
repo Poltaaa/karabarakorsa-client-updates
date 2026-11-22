@@ -16,12 +16,21 @@ window.I18N = {
     featureClosed: '(Kapalı)',
     tFeatureTrial: 'Bu ayar şu an kapalı; özellik deneme sürecinde.',
     spawnerTrigger: 'Oyuncu algılama mesafesi (1-50 blok)',
-    spawnerBreak: 'Kırma yarıçapı (blok)',
+    spawnerProtectHead: 'AKILLI SPAWNER KORUMA',
+    spawnerProtectSub: 'Güvenilir olmayan bir oyuncu yaklaşınca Ipeksi Dokunuşlu kazmayla spawnerları toplar.',
+    spawnerProtectCaps: 'SPAWNER KORUMA',
+    spawnerProtectMacroSub: 'Bir yabancı yaklaşınca spawnerları güvenli biçimde toplar ve işlem tamamlanınca hesabı çıkarır.',
+    spawnerDefense: 'SAVUNMA',
+    spawnerAccountScoped: 'Hesap bazlı',
+    spawnerWhitelist: 'Whitelist',
     spawnerTrustedCaps: 'GÜVENİLİR KİŞİLER',
-    spawnerTrustedSub: 'Bu isimlerden biri bot hesabının yakınına gelirse Spawner koruması AKTİVE OLMAZ; kazma boşa harcanmaz.',
+    spawnerTrustedSub: 'Bu listedeki oyuncular yok sayılır. Yakındaki başka bir güvenilir olmayan oyuncu korumayı yine tetikler.',
     spawnerTrustedPh: 'Oyuncu adı yaz, Enter ile ekle',
     spawnerTrustedRemove: 'Kaldır',
+    spawnerTrustedEmpty: 'Henüz güvenilir oyuncu eklenmedi.',
     spawnerExit: 'Spawnerlar bitince oyundan çık',
+    spawnerExitSub: 'Yalnızca koruma alanında spawner kalmadığında çıkar.',
+    spawnerSilkNote: 'Ipeksi Dokunuşlu kazma yoksa hiçbir spawner kırılmaz.',
     /* --- üst bar / panel --- */
     server: 'Sunucu', account: 'Hesap', ping: 'Gecikme', uptime: 'Süre',
     lblAccount: 'HESAP', lblServer: 'SUNUCU', lblStatus: 'DURUM', lblPing: 'GECİKME',
@@ -36,7 +45,9 @@ window.I18N = {
     qAfkOn: 'Anti AFK Aç', qAfkOff: 'Anti AFK Kapat', qJoin: 'Giriş Komutlarını Çalıştır',
     qInventory: 'Envanter',
     /* --- envanter (panel) --- */
-    invKeys: 'Kareye tıkla → seç. Q = 1 tane düşür · Ctrl+Q = yığının tamamını düşür.',
+    invInventory: 'Envanter',
+    invCrafting: 'Üretim',
+    invKeys: 'Sol tık: al/bırak · Sağ tık: yarıya böl/tek koy · Shift+tık: hızlı taşı/giy · Sürükle: taşı · 1–9/F: değiştir · Q: düşür',
     invTip: 'Eşya:',
     invLoading: 'Yükleniyor...',
     invFail: 'İşlem başarısız:',
@@ -46,6 +57,8 @@ window.I18N = {
     invNoAccount: 'Önce bağlı bir hesap seç.',
     invPickFirst: 'Önce bir kareye tıkla (seç).',
     invBusy: 'İşleniyor...',
+    invTimeout: 'Envanter yanıtı gecikti; işlem serbest bırakıldı.',
+    invCursorFull: 'Faredeki eşya geri konulamadı; önce envanterde yer aç.',
     /* --- bağlantı sayfası --- */
     serverIp: 'Sunucu IP', serverPort: 'Sunucu Port', mcVersion: 'Minecraft Sürümü',
     loginDelay: 'Giriş Gecikmesi (sn)', autoDetect: 'Otomatik algıla (önerilen)',
@@ -166,6 +179,10 @@ window.I18N = {
     noProxies: 'Proxy eklenmedi.',
     noMessages: 'Mesaj yok. "+ Mesaj ekle" ile ekleyin.',
     noCommands: 'Komut yok. "+ Komut ekle" ile ekleyin.',
+    joinAccTitle: 'Giriş mesajı: hangi hesaplarda gönderilsin?',
+    joinAccSub: 'Bu giriş mesajı yalnızca seçtiğin hesaplarda gönderilir. Seçili bir hesaba tekrar tıklarsan o hesapta bu mesaj kapanır (diğer mesajlar açık kalır).',
+    joinAccSaved: 'Giriş mesajı {n} hesapta açık',
+    joinAccOff: 'Giriş mesajı tüm hesaplarda kapatıldı',
     /* --- bildirimler (toast) --- */
     tSelected: 'Hesap seçildi', tUnselected: 'Hesap seçimi kaldırıldı',
     tAccDeleted: 'Hesap silindi', tAccSaved: 'Hesap kaydedildi',
@@ -280,12 +297,21 @@ window.I18N = {
     featureClosed: '(Closed)',
     tFeatureTrial: 'This setting is currently unavailable while the feature is being tested.',
     spawnerTrigger: 'Player detection distance (1-50 blocks)',
-    spawnerBreak: 'Break radius (blocks)',
+    spawnerProtectHead: 'SMART SPAWNER PROTECTION',
+    spawnerProtectSub: 'Collects spawners with a Silk Touch pickaxe when an untrusted player approaches.',
+    spawnerProtectCaps: 'SPAWNER PROTECTION',
+    spawnerProtectMacroSub: 'Safely collects spawners when a stranger approaches and disconnects the account when finished.',
+    spawnerDefense: 'DEFENSE',
+    spawnerAccountScoped: 'Per account',
+    spawnerWhitelist: 'Whitelist',
     spawnerTrustedCaps: 'TRUSTED PLAYERS',
-    spawnerTrustedSub: 'If one of these names comes near the bot account, Spawner Protect will NOT activate - no pickaxe breaks are wasted while a friend is close.',
+    spawnerTrustedSub: 'Players on this list are ignored. Any other untrusted player nearby will still trigger protection.',
     spawnerTrustedPh: 'Type a player name, press Enter to add',
     spawnerTrustedRemove: 'Remove',
+    spawnerTrustedEmpty: 'No trusted player has been added yet.',
     spawnerExit: 'Exit the game when all spawners are broken',
+    spawnerExitSub: 'Exits only when no spawners remain inside the protection area.',
+    spawnerSilkNote: 'No spawner is broken without a Silk Touch pickaxe.',
     server: 'Server', account: 'Account', ping: 'Ping', uptime: 'Uptime',
     lblAccount: 'ACCOUNT', lblServer: 'SERVER', lblStatus: 'STATUS', lblPing: 'PING',
     lblUptime: 'UPTIME', lblSpam: 'AUTO SPAM', lblAntiAfk: 'ANTI AFK',
@@ -298,7 +324,9 @@ window.I18N = {
     qAfkOn: 'Enable Anti AFK', qAfkOff: 'Disable Anti AFK', qJoin: 'Run Join Messages',
     qInventory: 'Inventory',
     /* --- inventory (panel) --- */
-    invKeys: 'Click a slot to select. Q = drop 1 · Ctrl+Q = drop the whole stack.',
+    invInventory: 'Inventory',
+    invCrafting: 'Crafting',
+    invKeys: 'Left click: pick/place · Right click: split/place one · Shift+click: quick move/equip · Drag: move · 1–9/F: swap · Q: drop',
     invTip: 'Item:',
     invLoading: 'Loading...',
     invFail: 'Action failed:',
@@ -308,6 +336,8 @@ window.I18N = {
     invNoAccount: 'Pick a connected account first.',
     invPickFirst: 'Click a slot to select it first.',
     invBusy: 'Working...',
+    invTimeout: 'Inventory response timed out; the panel was unlocked.',
+    invCursorFull: 'The item on the cursor could not be returned; free an inventory slot first.',
     serverIp: 'Server IP', serverPort: 'Server Port', mcVersion: 'Minecraft Version',
     loginDelay: 'Login Delay (sec)', autoDetect: 'Auto detect (recommended)',
     respack: 'Resource pack',
@@ -417,6 +447,10 @@ window.I18N = {
     noProxies: 'No proxy added.',
     noMessages: 'No messages. Add one with "+ Add message".',
     noCommands: 'No commands. Add one with "+ Add command".',
+    joinAccTitle: 'Join message: which accounts should send it?',
+    joinAccSub: 'This join message is sent only for the accounts you pick. Click a selected account again to turn this message off there (the other messages stay on).',
+    joinAccSaved: 'Join message on for {n} account(s)',
+    joinAccOff: 'Join message turned off for all accounts',
     tSelected: 'Account selected', tUnselected: 'Account unselected',
     tAccDeleted: 'Account deleted', tAccSaved: 'Account saved',
     tUsernameNeeded: 'A username is required.', tAddAccountFirst: 'Add an account first.',
@@ -528,3 +562,18 @@ window.t = (key) => {
 };
 // $1, $2 ... yer tutuculu metinler icin
 window.tf = (key, ...args) => String(window.t(key)).replace(/\$(\d)/g, (_m, i) => args[Number(i) - 1] !== undefined ? args[Number(i) - 1] : '');
+
+Object.assign(window.I18N.tr, {"abArea": "İNŞA ALANI", "abAccount": "Hesap / oturum", "abCorners": "İki çapraz köşe dahil: önce en alt Y katmanı, sonra üst katmanlar.", "abCorner1": "1. köşe", "abCorner2": "2. köşe", "abPosition": "Konumumu al", "abBlock": "Yerleştirilecek blok", "abSearch": "Blok ara… (ruh kumu / soul sand)", "abProgress": "İNŞA DURUMU", "abPlaced": "Yerleştirilen", "abSkipped": "Önceden dolu", "abLayer": "Y katmanı", "abInventory": "Envanterde", "abStart": "Başlat", "abPause": "Duraklat", "abResume": "Devam et", "abStop": "Durdur", "abSafety": "Yalnızca boş hücreler doldurulur. Blok kırılmaz, ekstra iskele kurulmaz; uçma veya ışınlanma yoktur. Güvenli yol bulunamazsa duraklar. Bağlantı / dünya değişince durur, kendiliğinden yeniden başlamaz.", "abConflict": "Auto Farm, Auto Sell ve Spawner Koruma bu hesapta kapalı olmalı. İnşa sırasında Anti AFK hareketleri bekler; fizik geçici olarak açılır.", "abBack": "Makrolara dön", "abCard": "İki çapraz XYZ köşesi arasını, envanterindeki bloklarla alttan üste doldur.", "abOpen": "Auto Build ayarları", "abOffline": "Çevrimiçi bir hesap seç.", "abUpper": "En fazla blok", "abNeed": "Gerçek ihtiyaç, önceden dolu hücreler atlandıkça azalır.", "abVersion": "Blok listesi sürümü", "abDisabledBlock": "Eşya karşılığı yok / birden fazla hücre kaplıyor", "abNoMatches": "Blok bulunamadı", "abConfirm": "Bu alanın boş hücrelerini doldurmak için Başlat’a tekrar bas.", "abTarget": "Sıradaki koordinat", "abIdle": "Hazır", "abRunning": "İnşa ediliyor", "abPaused": "Duraklatıldı", "abStopped": "Durduruldu", "abComplete": "Tamamlandı"});
+Object.assign(window.I18N.en, {"abArea": "BUILD AREA", "abAccount": "Account / session", "abCorners": "Both corners included: lowest Y layer first, then the layers above.", "abCorner1": "Corner 1", "abCorner2": "Corner 2", "abPosition": "Use my position", "abBlock": "Block to place", "abSearch": "Find a block\u2026 (soul sand)", "abProgress": "BUILD STATUS", "abPlaced": "Placed", "abSkipped": "Already occupied", "abLayer": "Y layer", "abInventory": "In inventory", "abStart": "Start", "abPause": "Pause", "abResume": "Resume", "abStop": "Stop", "abSafety": "Only air cells are filled. No digging, extra scaffolding, flying or teleporting. Pauses when no safe route is found. Stops on disconnect / world change and never restarts automatically.", "abConflict": "Turn off Auto Farm, Auto Sell and Spawner Protect for this account. Anti AFK movements wait during building; physics is enabled temporarily.", "abBack": "Back to macros", "abCard": "Fill the cuboid between two diagonal XYZ corners, bottom-up using inventory blocks.", "abOpen": "Auto Build settings", "abOffline": "Select an online account.", "abUpper": "Maximum blocks", "abNeed": "Actual need decreases as existing occupied cells are skipped.", "abVersion": "Block list version", "abDisabledBlock": "No matching item / occupies multiple cells", "abNoMatches": "No blocks found", "abConfirm": "Press Start again to fill the air cells in this area.", "abTarget": "Next coordinate", "abIdle": "Ready", "abRunning": "Building", "abPaused": "Paused", "abStopped": "Stopped", "abComplete": "Complete"});
+
+Object.assign(window.I18N.tr, {abWartHint: 'Nether Wart ekimi: Y, ruh kumunun bir üstü olmalı. Örn. ruh kumu 65 → iki köşede wart 66.'});
+Object.assign(window.I18N.en, {abWartHint: 'Nether Wart: plant one Y above soul sand. E.g. soul sand 65 → wart 66 in both corners.'});
+
+Object.assign(window.I18N.tr, {abRescueOwn:'Sıkışınca yalnızca bu işte koyduğu blokları kır, çık ve arkayı kapat',abPlannerHint:'Hizalı şeritler: blok ve Nether Wart için en fazla 3 yerleştirme, sonra yan sıra. Wart ruh kumu üstünde ekilir; normal bloklar gerektiğinde tek düz dayanak hattıyla başlar.',abSafety:'Önceden var olan bloklar korunur. Kurtarma açıksa yalnızca doğrulanmış kendi bloklarıyla geçit açar; tamamen çıktıktan sonra kapatır. Ekstra iskele, uçma/ışınlanma yok. Güvenli yol veya onay yoksa duraklar. Dünya/bağlantı değişince durur.'});
+Object.assign(window.I18N.en, {abRescueOwn:'When trapped, open a passage through this job’s own blocks, exit, then reseal',abPlannerHint:'Aligned strips: up to 3 blocks or Nether Wart crops, then the adjacent row. Wart uses real soul-sand footing; solid blocks use one straight seed line when needed.',abSafety:'Pre-existing blocks are protected. Rescue only opens confirmed own blocks and reseals after fully exiting. No extra scaffold, flying or teleporting. Pauses without a verified route or acknowledgement. Stops on world/disconnect.'});
+
+Object.assign(window.I18N.tr,{abFastWalk:'Güvenli düz zeminde koşarak git (normal Minecraft koşusu)'});
+Object.assign(window.I18N.en,{abFastWalk:'Use vanilla sprint on safe flat ground'});
+
+Object.assign(window.I18N.tr,{abAutoPass:'Otomatik geç',abAutoPassHint:'Katı bloklarda konum uyarısından sonra bekleyip bir kez devam eder. 60 saniyede ikinci düzeltmede durur. Diğer hataları geçmez; ban garantisi değildir.'});
+Object.assign(window.I18N.en,{abAutoPass:'Automatic continue',abAutoPassHint:'For solid blocks, wait then resume once after a position warning. Stops on a second correction within 60 seconds. Other errors are not bypassed; no ban guarantee.'});

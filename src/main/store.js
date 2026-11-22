@@ -98,15 +98,15 @@ const DEFAULTS = {
     maxInterval: 60
   },
   // v1.15.14: Spawner Protect
-  // Yakina bir oyuncu gelince 20 blok yaricipindaki spawnerlar kırılır
+  // Yakina bir oyuncu gelince sabit 150 blok koruma alanindaki spawnerlar kırılır
   // (en iyi Ipeksi Dokunuslu kazma + Shift basili tutarak).
   spawnerProtect: {
     enabled: false,
     triggerRadius: 50,   // 1-50: yakina gelen oyuncu algilama mesafesi
-    breakRadius: 20,     // kırma yaricapi (blok)
     trusted: [],         // guvenilir kisiler: bunlar yakindayken koruma AKTIVE OLMAZ
-    exitAfterBreak: false // paket 77: tum spawnerlar kirilinca oyundan cik
+    exitAfterBreak: true  // tum spawnerlar gerçekten kirilinca oyundan cik
   },
+  autoBuild: { perAccount: {} },
   autoReconnect: {
     enabled: false,
     delay: 10,
@@ -212,6 +212,11 @@ class Store {
     try {
       const raw = fs.readFileSync(this.file, 'utf8');
       const data = deepMerge(DEFAULTS, JSON.parse(raw));
+      // Package 113: explicitly opt in to sprint again after the safety update.
+      if(!data.__buildSafety113){
+        for(const spec of Object.values(data.autoBuild?.perAccount||{}))if(spec&&typeof spec==='object')spec.fastWalk=false;
+        data.__buildSafety113=true;
+      }
       // 1.4.5 ve oncesinde varsayilan 'decline' idi; zorunlu paket isteyen sunucularda takiliyordu
       if (!data.__packMigrated) {
         if (data.connection.resourcePack === 'decline') data.connection.resourcePack = 'smart';
@@ -259,6 +264,18 @@ class Store {
         }
         data.__noAutoScrollMigrated = true;
       }
+      // Paket 85: Spawner Koruma tekrar açıldı. Eski paketlerde çıkış varsayılanı
+      // kapalıydı; yeni koruma akışında bütün spawnerlar başarıyla kırılınca
+      // hesabın oyundan çıkması istenen güvenli varsayılandır.
+      if (!data.__spawnerProtect85Migrated) {
+        data.spawnerProtect = data.spawnerProtect || {};
+        data.spawnerProtect.exitAfterBreak = true;
+        data.spawnerProtect.triggerRadius = Math.min(50, Math.max(1, Number(data.spawnerProtect.triggerRadius) || 50));
+        data.__spawnerProtect85Migrated = true;
+      }
+      // Paket 99: ayri spawner yaricapi kaldirildi; eski config anahtari da
+      // diskte kalip gorunmeyen bir ayar gibi davranmasin.
+      if (data.spawnerProtect) delete data.spawnerProtect.breakRadius;
       return data;
     } catch (e) {
       return JSON.parse(JSON.stringify(DEFAULTS));

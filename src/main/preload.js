@@ -42,7 +42,19 @@ contextBridge.exposeInMainWorld('api', {
     players: (slot) => ipcRenderer.invoke('bot:players', slot),
     tabComplete: (query, slot) => ipcRenderer.invoke('bot:tab-complete', { query, slot }),
     inventoryGet: (slot) => ipcRenderer.invoke('bot:inventory-get', slot),
-    inventoryDrop: (slot, winSlot, action) => ipcRenderer.invoke('bot:inventory-drop', { slot, winSlot, action })
+    inventoryDrop: (slot, winSlot, action) => ipcRenderer.invoke('bot:inventory-drop', { slot, winSlot, action }),
+    inventoryOp: (session, op) => ipcRenderer.invoke('bot:inventory-op', { session, op })
+  },
+  autoBuild: {
+    setAutoPass: (slot, enabled) => ipcRenderer.invoke('autobuild:auto-pass', { slot, enabled }),
+    catalog: (slot) => ipcRenderer.invoke('autobuild:catalog', slot),
+    state: (slot) => ipcRenderer.invoke('autobuild:state', slot),
+    position: (slot) => ipcRenderer.invoke('autobuild:position', slot),
+    preview: (slot, spec) => ipcRenderer.invoke('autobuild:preview', { slot, spec }),
+    start: (slot, spec) => ipcRenderer.invoke('autobuild:start', { slot, spec }),
+    pause: (slot) => ipcRenderer.invoke('autobuild:pause', slot),
+    resume: (slot) => ipcRenderer.invoke('autobuild:resume', slot),
+    stop: (slot) => ipcRenderer.invoke('autobuild:stop', slot)
   },
   accounts: {
     add: (a) => ipcRenderer.invoke('accounts:add', a),
@@ -80,7 +92,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   diag: (msg) => ipcRenderer.invoke('diag', msg),
   on: (channel, cb) => {
-    const allowed = ['log', 'status', 'chat', 'metrics', 'spam-state', 'macro-state', 'spawner-state', 'autosell-state', 'msa-done', 'notice',
+    const allowed = ['log', 'status', 'chat', 'metrics', 'spam-state', 'macro-state', 'spawner-state', 'autosell-state', 'autobuild-state', 'msa-done', 'notice',
       'win-state', 'dialog', 'dialog-close', 'screen-open', 'screen-close', 'config-changed', 'slots', 'refresh', 'tor-state',
       'update-state', 'update-progress', 'update-downloaded', 'update-error'];
     if (!allowed.includes(channel)) return () => {};

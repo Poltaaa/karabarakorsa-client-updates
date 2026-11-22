@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'" />
 <title>Karabarakorsa AFK Client</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
@@ -75,7 +75,7 @@
     <button class="nav" data-page="proxies"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="6" rx="2"/><rect x="2" y="15" width="20" height="6" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg><span data-i18n="navProxies">PROXIES</span></button>
     <button class="nav" data-page="logs"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 10h16"/><path d="M4 15h10"/><path d="M4 20h7"/></svg><span data-i18n="navLogs">LOGS</span></button>
     <button class="nav" data-page="settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span data-i18n="navSettings">SETTINGS</span></button>
-    <div class="sidebar-foot"><span id="foot-ver">v1.15.16</span><span class="made">made by Poltaaa</span></div>
+    <div class="sidebar-foot"><span id="foot-ver">v1.15.19</span><span class="made">made by Poltaaa</span></div>
   </nav>
 
   <!-- ===================== MAIN ===================== -->
@@ -94,7 +94,7 @@
           </div>
           <div class="console soft" id="dash-chat"></div>
           <div class="row gap send-row">
-            <input id="dash-chat-input" data-i18n-ph="chatPh" placeholder="..." />
+            <div class="masked-wrap chat-secret-wrap"><input id="dash-chat-input" data-i18n-ph="chatPh" placeholder="..." autocomplete="off" /></div>
             <button class="btn primary" id="dash-chat-send" data-i18n="send">Send</button>
           </div>
         </div>
@@ -199,7 +199,7 @@
                 <label class="check"><input type="checkbox" data-toggle="sneak" data-feat="sneak" /><span data-i18n="tSneak">Sneak</span></label>
                 <label class="check"><input type="checkbox" data-toggle="physics" data-feat="physics" /><span data-i18n="tPhysics">Bot Physics</span></label>
                 <label class="check"><input type="checkbox" data-toggle="antiAfk" data-feat="antiAfk" /><span data-i18n="antiAfk">Anti AFK</span><button class="gear" data-goto="antiafk" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
-                <label class="check feature-locked"><input type="checkbox" data-feat="spawnerProtect" /><span data-i18n="tSpawnerProtect">Spawner Protect</span><em class="locked-note" data-i18n="featureClosed">(Closed)</em><button class="gear" data-goto="spawner" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
+                <label class="check"><input type="checkbox" data-feat="spawnerProtect" /><span data-i18n="tSpawnerProtect">Spawner Protect</span><button class="gear" data-goto="spawner" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
                 <label class="check"><input type="checkbox" data-toggle="autoReconnect" data-feat="autoReconnect" /><span data-i18n="tAutoReconnect">Auto Reconnect</span><button class="gear" data-goto="reconnect" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
                 <label class="check"><input type="checkbox" data-toggle="joinMessages" data-feat="joinMessages" /><span data-i18n="tJoin">Join Messages</span><button class="gear" data-goto="join" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
                 <label class="check"><input type="checkbox" data-toggle="worldChangeMessages" data-feat="worldChangeMessages" /><span data-i18n="tWorldChange">World Change Messages</span></label>
@@ -228,7 +228,7 @@
         <div class="slot-tabs" id="chat-slots"></div>
         <div class="console" id="chat-box"></div>
         <div class="row gap send-row">
-          <input id="chat-input" data-i18n-ph="chatPh" placeholder="Mesaj yaz ve Enter'a bas..." />
+          <div class="masked-wrap chat-secret-wrap"><input id="chat-input" data-i18n-ph="chatPh" placeholder="Mesaj yaz ve Enter'a bas..." autocomplete="off" /></div>
           <button class="btn primary" id="chat-send" data-i18n="send">Send</button>
         </div>
       </div>
@@ -362,33 +362,39 @@
     <!-- ---------- SPAWNER PROTECT ---------- -->
     <section class="page" id="page-spawner">
       <h1 class="page-title"><button class="page-back" data-history-back aria-label="Back" title="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><span data-i18n="tSpawnerProtect">Spawner Protect</span></h1>
-      <div class="grid two">
+      <div class="grid two sp-simple-grid">
         <div class="card">
-          <div class="card-head" data-i18n="settingsCaps">SETTINGS</div>
-          <label class="check feature-locked"><input type="checkbox" id="sp-enabled" data-feat="spawnerProtect" /><span data-i18n="tSpawnerProtect">Spawner Protect</span><em class="locked-note" data-i18n="featureClosed">(Closed)</em></label>
-          <div class="field mt">
-            <span data-i18n="spawnerTrigger">Player detection distance (1-50 blocks)</span>
-            <div class="slider-row">
-              <div class="slider">
-                <div class="slider-track"><i class="slider-fill" id="sp-trigger-fill"></i></div>
-                <input id="sp-trigger" type="range" min="1" max="50" step="1" value="50" />
-              </div>
-              <span class="slider-val" id="sp-trigger-val">50</span>
+          <div class="card-head" data-i18n="spawnerProtectCaps">SPAWNER PROTECTION</div>
+          <label class="check">
+            <input type="checkbox" id="sp-enabled" data-feat="spawnerProtect" />
+            <span data-i18n="tSpawnerProtect">Spawner Protect</span>
+          </label>
+          <p class="hint" data-i18n="spawnerProtectSub">Collects spawners with a Silk Touch pickaxe when an untrusted player approaches.</p>
+
+          <div class="sp-range-card sp-simple-range">
+            <div class="sp-range-head"><span data-i18n="spawnerTrigger">Player detection distance (1-50 blocks)</span><b><span id="sp-trigger-val">50</span> m</b></div>
+            <div class="slider sp-hard-slider">
+              <div class="slider-track"><i class="slider-fill" id="sp-trigger-fill"></i></div>
+              <input id="sp-trigger" type="range" min="1" max="50" step="1" value="50" />
             </div>
           </div>
-          <label class="check mt">
+
+          <label class="check sp-simple-exit">
             <input type="checkbox" id="sp-exit" />
             <span data-i18n="spawnerExit">Exit game after all spawners are broken</span>
           </label>
-          
+          <p class="hint sp-exit-hint" data-i18n="spawnerExitSub">Exits only when no spawners remain inside the protection area.</p>
         </div>
+
         <div class="card">
           <div class="card-head" data-i18n="spawnerTrustedCaps">TRUSTED PLAYERS</div>
           <p class="hint" data-i18n="spawnerTrustedSub"></p>
-          <div class="row gap mt">
+          <div class="sp-trusted-add">
             <input class="trusted-input" id="sp-trusted-input" type="text" spellcheck="false" data-i18n-ph="spawnerTrustedPh" placeholder="Type a player name..." />
+            <span aria-hidden="true">↵</span>
           </div>
-          <div class="list scroll8 mt" id="sp-trusted-list"></div>
+          <div class="list scroll8 sp-trusted-list" id="sp-trusted-list"></div>
+          <p class="hint sp-simple-note" data-i18n="spawnerSilkNote">No spawner is broken without a Silk Touch pickaxe.</p>
         </div>
       </div>
     </section>
@@ -411,6 +417,7 @@
     <section class="page" id="page-macros">
       <h1 class="page-title"><span data-i18n="macros">Macros</span> <span class="badge hidden" id="mac-badge"><i class="dot on"></i><span data-i18n="macRunning">RUNNING</span></span></h1>
       <div class="grid two">
+        <div class="card"><div class="card-head">AUTO BUILD</div><p class="hint" data-i18n="abCard">İki çapraz XYZ köşesi arasını, envanterindeki bloklarla alttan üste doldur.</p><button class="btn primary" data-goto="autobuild" data-i18n="abOpen">Auto Build ayarları</button></div>
         <div class="card">
           <div class="card-head" data-i18n="macrosCaps">MACROS</div>
           <label class="check"><input type="checkbox" id="mac-farmer-en" data-feat="macroFarmer" /><span data-i18n="macFarmer">Auto Farm</span><button class="gear" data-goto="macrofarmer" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
@@ -426,7 +433,57 @@
           <label class="check"><input type="checkbox" id="mac-autosell-en" data-feat="macroAutoSell" /><span data-i18n="autoSell">Auto Sell</span><button class="gear" data-goto="macroautosell" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></label>
           <p class="hint" data-i18n="autoSellSub">Opens the nearest chest, quickly takes everything that fits, closes it and sends /sellall on repeat.</p>
         </div>
+        <div class="card">
+          <div class="card-head" data-i18n="spawnerProtectCaps">SPAWNER PROTECTION</div>
+          <label class="check"><input type="checkbox" id="mac-spawner-protect-en" data-feat="spawnerProtect" /><span data-i18n="tSpawnerProtect">Spawner Protect</span><button class="gear" data-goto="spawner" data-i18n-title="openSettings" title="Settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1A1.7 1.7 0 0 0 19.4 15z"/></svg></button></label>
+          <p class="hint" data-i18n="spawnerProtectMacroSub">Safely collects spawners when a stranger approaches and disconnects the account when finished.</p>
+        </div>
       </div>
+    </section>
+
+    <section class="page" id="page-autobuild">
+      <h1 class="page-title">Auto Build <span class="badge" id="ab-badge"></span></h1>
+      <div class="grid two ab-grid">
+        <div class="card ab-settings">
+          <div class="card-head" data-i18n="abArea">İNŞA ALANI</div>
+          <label class="field"><span data-i18n="abAccount">Hesap / oturum</span><select id="ab-account"></select></label>
+          <p class="hint" data-i18n="abCorners">İki çapraz köşe dahil: önce en alt Y katmanı, sonra üst katmanlar.</p>
+          <div class="ab-corners">
+            <fieldset><legend data-i18n="abCorner1">1. köşe</legend><div class="ab-xyz">
+              <label>X<input id="ab-x1" type="number" step="1" /></label><label>Y<input id="ab-y1" type="number" step="1" /></label><label>Z<input id="ab-z1" type="number" step="1" /></label>
+            </div><button class="btn small" id="ab-copy1" data-i18n="abPosition">Konumumu al</button></fieldset>
+            <fieldset><legend data-i18n="abCorner2">2. köşe</legend><div class="ab-xyz">
+              <label>X<input id="ab-x2" type="number" step="1" /></label><label>Y<input id="ab-y2" type="number" step="1" /></label><label>Z<input id="ab-z2" type="number" step="1" /></label>
+            </div><button class="btn small" id="ab-copy2" data-i18n="abPosition">Konumumu al</button></fieldset>
+          </div>
+          <label class="field"><span data-i18n="abBlock">Yerleştirilecek blok</span></label>
+          <div class="ab-picker" id="ab-picker">
+            <button class="ab-selected" id="ab-selected" aria-haspopup="listbox" aria-expanded="false"><i class="ab-icon"></i><span id="ab-selected-name">Stone</span><span class="ab-arrow">▾</span></button>
+            <div class="ab-menu hidden" id="ab-menu">
+              <input type="search" id="ab-search" autocomplete="off" data-i18n-ph="abSearch" placeholder="Blok ara…" aria-controls="ab-list" />
+              <div class="ab-viewport" id="ab-list" role="listbox" aria-label="Blocks"><div id="ab-list-space"></div></div>
+              <div class="hint ab-menu-note" id="ab-menu-note"></div>
+            </div>
+          </div>
+          <p class="hint" id="ab-version"></p>
+          <label class="check"><input type="checkbox" id="ab-fast-walk" /><span data-i18n="abFastWalk">Güvenli düz zeminde koşarak git (normal Minecraft koşusu)</span></label>
+          <label class="check"><input type="checkbox" id="ab-rescue-own" checked /><span data-i18n="abRescueOwn">Sıkışınca yalnızca bu işte koyduğu blokları kır, çık ve arkayı kapat</span></label>
+          <p class="hint" data-i18n="abPlannerHint">Hizalı şeritler: blok ve Nether Wart için en fazla 3 yerleştirme, sonra yan sıra. Wart ruh kumu üstünde ekilir; normal bloklar gerektiğinde tek düz dayanak hattıyla başlar.</p>
+          <p class="ab-preview" id="ab-preview" aria-live="polite"></p>
+        </div>
+        <div class="card">
+          <div class="card-head" data-i18n="abProgress">İNŞA DURUMU</div>
+          <div class="ab-stats"><div><span data-i18n="abPlaced">Yerleştirilen</span><strong id="ab-placed">0</strong></div><div><span data-i18n="abSkipped">Önceden dolu</span><strong id="ab-skipped">0</strong></div><div><span data-i18n="abLayer">Y katmanı</span><strong id="ab-layer">—</strong></div><div><span data-i18n="abInventory">Envanterde</span><strong id="ab-inventory">0</strong></div></div>
+          <progress id="ab-progress" max="100" value="0"></progress><p class="hint" id="ab-counter">0 / 0</p>
+          <div class="ab-target" id="ab-target"></div><p class="hint" id="ab-phase" aria-live="polite"></p><p class="hint" id="ab-repairs"></p><p class="ab-reason" id="ab-reason" aria-live="polite"></p>
+          <div class="ab-controls"><button class="btn primary" id="ab-start" data-i18n="abStart">Başlat</button><button class="btn" id="ab-pause" data-i18n="abPause">Duraklat</button><button class="btn" id="ab-resume" data-i18n="abResume">Devam et</button><button class="btn danger" id="ab-stop" data-i18n="abStop">Durdur</button></div>
+          <label class="check"><input type="checkbox" id="ab-auto-pass" /><span data-i18n="abAutoPass">Otomatik geç</span></label>
+          <p class="hint" id="ab-auto-pass-note" data-i18n="abAutoPassHint">Katı bloklarda konum uyarısından sonra bekleyip bir kez devam eder. 60 saniyede ikinci düzeltmede durur. Diğer hataları geçmez; ban garantisi değildir.</p>
+          <p class="hint ab-safety" data-i18n="abSafety">Yalnızca boş hücreler doldurulur. Blok kırılmaz, ekstra iskele kurulmaz; uçma veya ışınlanma yoktur. Güvenli yol bulunamazsa duraklar. Bağlantı / dünya değişince durur, kendiliğinden yeniden başlamaz.</p>
+          <p class="hint" data-i18n="abConflict">Auto Farm, Auto Sell ve Spawner Koruma bu hesapta kapalı olmalı. İnşa sırasında Anti AFK hareketleri bekler; fizik geçici olarak açılır.</p>
+        </div>
+      </div>
+      <button class="btn" data-goto="macros" data-i18n="abBack">Makrolara dön</button>
     </section>
 
     <!-- ---------- AUTO FARM (macro settings) ---------- -->
@@ -790,27 +847,44 @@
   </div>
 </div>
 
-<!-- Envanter (paket 77: Minecraft tarzi, Q ve Ctrl+Q) -->
+<!-- Envanter (paket 99: gercek Minecraft oyuncu envanteri yerlesimi) -->
 <div class="modal hidden" id="inv-modal">
   <div class="modal-card form inv-card">
     <div class="inv-top">
       <div class="inv-account" id="inv-sub">-</div>
       <button class="inv-x" id="inv-close" data-i18n-title="close" title="Close" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <div class="mcchest inv-chest">
-      <div class="inv-body">
-        <div class="inv-side">
-          <div class="inv-grid inv-armor" id="inv-armor"></div>
-          <div class="inv-grid inv-offhand" id="inv-offhand"></div>
+    <div class="mc-inventory-window inv-chest">
+      <div class="mc-inv-title" data-i18n="invInventory">Inventory</div>
+      <div class="mc-inv-upper">
+        <div class="inv-grid inv-armor" id="inv-armor" aria-label="Armor"></div>
+
+        <div class="mc-player-area">
+          <div class="mc-player-canvas" aria-hidden="true">
+            <div class="mc-steve">
+              <i class="steve-head"></i>
+              <i class="steve-body"></i>
+              <i class="steve-arm left"></i><i class="steve-arm right"></i>
+              <i class="steve-leg left"></i><i class="steve-leg right"></i>
+            </div>
+          </div>
+          <div class="inv-grid inv-offhand" id="inv-offhand" aria-label="Off hand"></div>
         </div>
-        <div class="inv-center">
-          <div class="inv-grid" id="inv-main"></div>
-          <div class="inv-grid inv-hot" id="inv-hotbar"></div>
+
+        <div class="mc-crafting" aria-hidden="true">
+          <div class="mc-craft-title" data-i18n="invCrafting">Crafting</div>
+          <div class="mc-craft-line">
+            <div class="inv-grid mc-craft-grid" id="inv-craft" aria-label="Crafting grid"></div>
+            <span class="mc-craft-arrow"></span>
+            <div class="inv-grid inv-craft-out" id="inv-craft-out" aria-label="Crafting result"></div>
+          </div>
         </div>
       </div>
+
+      <div class="mc-inv-label" data-i18n="invInventory">Inventory</div>
+      <div class="inv-grid inv-main" id="inv-main"></div>
+      <div class="inv-grid inv-hot" id="inv-hotbar"></div>
     </div>
-    <div class="inv-hint" data-i18n="invKeys">Click a slot to select. Q = drop 1 · Ctrl+Q = drop the whole stack.</div>
-    <p class="hint" id="inv-status"></p>
   </div>
 </div>
 
@@ -820,5 +894,6 @@
 <script src="core.js"></script>
 <script src="i18n.js"></script>
 <script src="renderer.js"></script>
+<script src="auto-build-ui.js"></script>
 </body>
 </html>

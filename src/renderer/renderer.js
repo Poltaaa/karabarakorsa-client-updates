@@ -10,6 +10,11 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const attr = (s) => esc(s).replace(/"/g, '&quot;');
 const fatal = (m) => window.report(m);
+function setTextIfChanged(el, value) {
+  if (!el) return;
+  const text = String(value);
+  if (el.textContent !== text) el.textContent = text;
+}
 function safe(fn, label) { try { return fn(); } catch (e) { fatal('[' + (label || 'init') + '] ' + e.message); } }
 
 let cfg = null;
@@ -25,6 +30,11 @@ let chatSlot = 0;                         // sohbette gosterilen oturum (0 = akt
 let logSlot = 0;                          // kayitlarda gosterilen oturum (0 = TUMU)
 let slotTabsSig = '';
 let dashSessionsSig = '';
+let topChipsSig = '';
+let dashTilesPaintSig = '';
+let autoSellPaintSig = '';
+let pillStatusSig = '';
+const dashSessionRows = new Map();
 let accountMutationDepth = 0;
 const unreadChat = new Set();
 const unreadLog = new Set();
@@ -78,7 +88,7 @@ async function renderChatHistory() {
   const dash = document.getElementById('dash-chat');
   if (dash) dash.innerHTML = '';
   const h = await bridge.bot.chatHistory(effChatSlot());
-  (h || []).forEach((e) => addChatLine(e, true));
+  appendChatBatch(h || [], true);
 }
 function pruneSlots() {
   const has = (n) => (slotInfo.list || []).some((s) => s.slot === n);
@@ -133,7 +143,7 @@ async function boot() {
   bridge.appInfo().then((i) => {
     const box = $('s-appinfo');
     if (box) box.textContent = `${i.name} v${i.version}\nmade by ${i.author}\n${i.configPath}\n${i.logPath}`;
-    const fv = $('foot-ver'); if (fv) fv.textContent = 'v' + i.version;
+    const fv = $('foot-ver'); if (fv) fv.textContent = 'v' + i.version + (i.build ? ' · ' + i.build : '');
     appVer = i.version || '';
   });
   if (bridge.update && bridge.update.state) {
@@ -412,7 +422,7 @@ function renderAccounts() {
   bindAccountSorting($('connect-accounts'));
   accountsSig = accountSignature();
   paintStartupRow();
-  try { applyFeatureUI(); if (featPick || spamAct) renderFeatPicker(); } catch (_) {}
+  try { applyFeatureUI(); if (featPick || spamAct || joinPick) renderFeatPicker(); } catch (_) {}
   try { window.enhanceScrollFade(); } catch (_) {}
 
   document.querySelectorAll('#accounts-list [data-act], #connect-accounts [data-act]').forEach((b) => {
@@ -681,12 +691,7 @@ function snapChatToBottom(box) {
   if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(set);
   else window.setTimeout(set, 0);
 }
-function addChatLine(entry, skipFilter) {
-  if (!entry) return;
-  // Baska bir hesabin sohbeti: satir yazilmaz, o sekmede okunmamis isareti cikar
-  if (!skipFilter && entry.slot && entry.slot !== effChatSlot()) {
-    unreadChat.add(entry.slot); renderSlotTabs(); return;
-  }
+function chatLineNode(entry) {
   const cls = entry.type === 'self' ? 'self' : entry.type === 'error' ? 'error' : entry.type === 'system' ? 'system' : '';
   // Gonderen adi: sunucu mesajin icine koymadiysa basa eklenir
   const who = entry.from ? `<span class="who">${esc(entry.from)}</span><span class="wsep">:</span>` : '';
@@ -694,26 +699,68 @@ function addChatLine(entry, skipFilter) {
     ? spanHtml(entry.spans)
     : esc(entry.message == null ? '' : entry.message);
   const html = `<span class="time">[${entry.time || nowTime()}]</span>${who}<span class="msg">${body}</span>`;
-  const limit = cfg && cfg.settings.memoryOptimization ? 250 : 600;
-  const put = (box, cap) => {
-    if (!box) return;
-    const stick = atChatBottom(box);
-    const div = document.createElement('div');
-    div.className = 'line ' + cls;
-    div.innerHTML = html;
-    box.appendChild(div);
-    while (box.childElementCount > cap) box.removeChild(box.firstChild);
-    if (stick) snapChatToBottom(box);
-  };
-  const stickChat = atChatBottom(chatBox);
   const div = document.createElement('div');
   div.className = 'line ' + cls;
   div.innerHTML = html;
-  chatBox.appendChild(div);
-  while (chatBox.childElementCount > limit) chatBox.removeChild(chatBox.firstChild);
-  if (stickChat) snapChatToBottom(chatBox);
+  return div;
+}
+
+// Sunucular girişte onlarca sohbet satırını aynı anda yollar. Her satır için
+// scrollHeight okuyup DOM yazmak zorunlu layout zinciri oluşturuyordu. Bir
+// pakette tek fragment, tek kırpma ve tek kaydırma hesabı kullan.
+function appendChatBatch(entries, skipFilter) {
+  if (!Array.isArray(entries) || !entries.length) return;
   const dash = document.getElementById('dash-chat');
-  put(dash, 60);   // panelde sadece son satirlar
+  const stickChat = atChatBottom(chatBox);
+  const stickDash = atChatBottom(dash);
+  const chatFrag = document.createDocumentFragment();
+  const dashFrag = document.createDocumentFragment();
+  let added = 0;
+  let unreadChanged = false;
+  for (const entry of entries) {
+    if (!entry) continue;
+    // Başka hesabın sohbetini çizme; yalnızca sekme rozetini bir kez güncelle.
+    if (!skipFilter && entry.slot && entry.slot !== effChatSlot()) {
+      const before = unreadChat.size;
+      unreadChat.add(entry.slot);
+      if (unreadChat.size !== before) unreadChanged = true;
+      continue;
+    }
+    const div = chatLineNode(entry);
+    chatFrag.appendChild(div);
+    dashFrag.appendChild(div.cloneNode(true));
+    added++;
+  }
+  if (unreadChanged) renderSlotTabs();
+  if (!added) return;
+  chatBox.appendChild(chatFrag);
+  if (dash) dash.appendChild(dashFrag);
+  const limit = cfg && cfg.settings.memoryOptimization ? 250 : 600;
+  while (chatBox.childElementCount > limit) chatBox.removeChild(chatBox.firstChild);
+  if (dash) while (dash.childElementCount > 60) dash.removeChild(dash.firstChild);
+  if (stickChat) snapChatToBottom(chatBox);
+  if (dash && stickDash) snapChatToBottom(dash);
+}
+
+function addChatLine(entry, skipFilter) {
+  appendChatBatch(entry ? [entry] : [], skipFilter);
+}
+
+let pendingChatLines = [];
+let chatFlushTimer = null;
+function queueChatLine(entry) {
+  if (!entry) return;
+  pendingChatLines.push(entry);
+  // Görsel kuyruk sınırsız büyümez; eksik kalan eski satırlar gerektiğinde
+  // ana süreçteki chatHistory tamponundan yeniden okunabilir.
+  if (pendingChatLines.length > 300) pendingChatLines.splice(0, pendingChatLines.length - 300);
+  if (chatFlushTimer) return;
+  chatFlushTimer = setTimeout(() => {
+    chatFlushTimer = null;
+    const batch = pendingChatLines;
+    pendingChatLines = [];
+    appendChatBatch(batch, false);
+  }, 50);
 }
 const chatInputState = new Map();
 function inputChatState(inputId) {
@@ -734,14 +781,21 @@ function moveChatHistory(inputId, direction) {
   const el = $(inputId); if (!el) return;
   const st = inputChatState(inputId);
   if (!st.history.length) return;
-  if (st.index === st.history.length) st.draft = el.value;
+  if (st.index === st.history.length) st.draft = maskedValue(el);
   st.index = direction < 0 ? Math.max(0, st.index - 1) : Math.min(st.history.length, st.index + 1);
+  delete el.dataset.real;
+  delete el.dataset.masked;
+  delete el.dataset.revealed;
   el.value = st.index === st.history.length ? st.draft : st.history[st.index];
+  refreshMask(el);
   el.setSelectionRange(el.value.length, el.value.length);
   st.tab = null;
 }
 async function completeChatInput(inputId) {
   const el = $(inputId); if (!el) return;
+  // Sifre yazilmaya baslandiktan sonra gorunen yildizlari komut/oyuncu
+  // tamamlama girdisi olarak kullanma.
+  if (el.dataset.real !== undefined) return;
   const pos = typeof el.selectionStart === 'number' ? el.selectionStart : el.value.length;
   const before = el.value.slice(0, pos);
   const m = before.match(/(?:^|\s)([^\s]*)$/);
@@ -782,12 +836,15 @@ async function completeChatInput(inputId) {
 }
 async function sendChat(inputId) {
   const el = $(inputId || 'chat-input');
-  const v = el.value.trim();
+  const v = maskedValue(el).trim();
   if (!v) return;
   const res = await bridge.bot.chat(v, effChatSlot());
   if (!res || !res.ok) { window.toast(T('tChatFail'), 'error'); return; }
   rememberChatInput(inputId || 'chat-input', v);
   el.value = '';
+  delete el.dataset.real;
+  delete el.dataset.masked;
+  removeMaskEye(el);
 }
 
 /* ============================= AUTO SPAM ================================== */
@@ -929,12 +986,12 @@ const FEATURE_PAGE = {
   macroFarmer: 'macrosCaps',
   macroSpawner: 'macrosCaps',
   macroAutoSell: 'macrosCaps',
+  spawnerProtect: 'macrosCaps',
   autoSpam: 'navSpam'
 };
-// Paket 77: Bu iki özellik deneme sürecinde. Arayüzde görünürler fakat hiçbir
-// açma yolu, hesap seçici veya ayar sayfası aktif değildir.
-const LOCKED_FEATURES = new Set(['macroSpawner', 'spawnerProtect']);
-const LOCKED_PAGES = new Set(['macrospawner', 'spawner']);
+// Spawner AFK deneme sürecinde kilitli kalır; Spawner Koruma yeniden açıktır.
+const LOCKED_FEATURES = new Set(['macroSpawner']);
+const LOCKED_PAGES = new Set(['macrospawner']);
 function featureLocked(key) { return LOCKED_FEATURES.has(key); }
 function lockedFeatureToast() { window.toast(T('tFeatureTrial'), 'warn'); }
 
@@ -1013,6 +1070,7 @@ function applyFeatureUI() {
     b.classList.toggle('hidden', !n);
   });
   paintDashTiles();
+  paintSpawnerProtectCard();
 }
 
 // Anahtara basinca hesap secme penceresi acilir (kapatirken de ayni pencere)
@@ -1083,6 +1141,7 @@ function afterFeatureChange(key) {
 /* --- hesap secme penceresi ------------------------------------------------ */
 let featPick = null;
 let spamAct = null;
+let joinPick = null;
 function openFeatPicker(key) {
   if (featureLocked(key)) {
     lockedFeatureToast();
@@ -1091,6 +1150,7 @@ function openFeatPicker(key) {
   if (!cfg) return;
   vpnPick = null;
   spamAct = null;
+  joinPick = null;
   $('am-off').classList.remove('hidden');
   featPick = { key, sel: featList(key) };
   const sub = document.querySelector('#acc-modal [data-i18n="amSub"]'); if (sub) sub.textContent = T('amSub');
@@ -1108,6 +1168,7 @@ function openStartupPicker() {
   if (!cfg) return;
   vpnPick = null;
   spamAct = null;
+  joinPick = null;
   featPick = { key: 'startup', sel: (cfg.settings.startupAccounts || []).slice() };
   $('am-off').classList.remove('hidden');
   const t = $('am-title'); if (t) t.textContent = T('startWithWindows');
@@ -1139,7 +1200,7 @@ function paintStartupRow() {
   b.classList.toggle('hidden', !n);
 }
 function renderFeatPicker() {
-  const pick = featPick || spamAct;
+  const pick = featPick || spamAct || joinPick;
   if (!pick) return;
   const box = $('am-list'); if (!box) return;
   const list = (cfg.accounts && cfg.accounts.list) ? cfg.accounts.list : [];
@@ -1191,6 +1252,59 @@ async function commitFeatPicker(ids, enabled) {
     saved.length ? 'ok' : 'info');
 }
 
+/* --- GIRIS MESAJI bazinda hesap secimi ------------------------------------
+   Her giris mesajinin yanindaki on/off anahtari artik tek bir hesap degil,
+   "bu mesaj hangi hesaplarda gonderilsin" listesini acar. Diger hesap secme
+   pencereleriyle ayni gorunum/kaydet akisi kullanilir. */
+function joinCmdAccounts(c) {
+  const ids = accIdList();
+  if (c && Array.isArray(c.accounts)) return c.accounts.filter((id) => ids.indexOf(id) !== -1);
+  // Eski kayitlar: accounts yoksa enabled'e gore ya hep ya hic
+  return (c && c.enabled) ? ids.slice() : [];
+}
+function joinCmdPickerTitle(c) {
+  const txt = String((c && c.command) || '').trim();
+  if (!txt) return T('joinAccTitle');
+  return txt.replace(MASK_CMD, '$1********');
+}
+function openJoinCmdPicker(index) {
+  if (!cfg) return;
+  const c = cfg.joinMessages.commands[index];
+  if (!c) return;
+  vpnPick = null;
+  featPick = null;
+  spamAct = null;
+  joinPick = { index, sel: joinCmdAccounts(c) };
+  $('am-off').classList.remove('hidden');
+  const t = $('am-title'); if (t) t.textContent = joinCmdPickerTitle(c);
+  const sub = document.querySelector('#acc-modal [data-i18n="amSub"]');
+  if (sub) sub.textContent = T('joinAccSub');
+  renderFeatPicker();
+  const m = $('acc-modal'); if (m) m.classList.remove('hidden');
+}
+function closeJoinCmdPicker() {
+  joinPick = null;
+  const m = $('acc-modal'); if (m) m.classList.add('hidden');
+}
+async function commitJoinPicker(ids, enabled) {
+  if (!joinPick) return;
+  const index = joinPick.index;
+  const c = cfg.joinMessages.commands[index];
+  closeJoinCmdPicker();
+  if (!c) return;
+  const valid = accIdList();
+  const clean = [];
+  (ids || []).forEach((id) => { if (valid.indexOf(id) !== -1 && clean.indexOf(id) === -1) clean.push(id); });
+  const on = enabled === undefined ? clean.length > 0 : !!enabled;
+  c.accounts = clean;   // secim her zaman KORUNUR; "kapat"ta da silinmez
+  c.enabled = on;       // master anahtar: kapaliyken hicbir hesap icin calismaz
+  await save({ joinMessages: { commands: cfg.joinMessages.commands } });
+  try { renderJoinList(); renderMacroOrder(); renderMacroPlan(); } catch (_) {}
+  window.toast(on
+    ? T('joinAccSaved').replace('{n}', String(clean.length))
+    : T('joinAccOff'), on ? 'ok' : 'info');
+}
+
 /* --- START / STOP icin gecici hesap secimi --------------------------------
    AUTO SPAM sayfasindaki BASLAT/DURDUR, "Baglaninca otomatik baslat" ayarindan
    tamamen bagimsizdir. Bu picker hicbir ayara yazmaz; secilen hesaplarda
@@ -1199,6 +1313,7 @@ function openSpamActPicker(start) {
   if (!cfg) return;
   vpnPick = null;
   featPick = null;
+  joinPick = null;
   const all = accIdList();
   // Varsayilan secim: BASLAT icin bagli olan hesaplar,
   // DURDUR icin su an spam'i DONEN hesaplar.
@@ -1239,6 +1354,7 @@ function dashTiles() {
 }
 // PANEL'deki anahtarlar SADECE o an secili hesaba etki eder: hesap sormaz.
 function renderDashTiles() {
+  dashTilesPaintSig = '';
   const box = $('dash-tiles'); if (!box) return;
   const keys = dashTiles();
   box.innerHTML = keys.map((k) => `<label class="check dashtile ${featureLocked(k) ? 'feature-locked' : ''}" data-tip-key="${k}">
@@ -1263,6 +1379,10 @@ function renderDashTiles() {
 // Panelde secili hesabin durumu
 function paintDashTiles() {
   const acc = activeAccountId();
+  const sig = JSON.stringify([acc, cfg && cfg.featureAccounts, cfg && cfg.featureEnabled,
+    cfg && cfg.accounts.list.map((a) => [a.id, a.username]), window.__lang]);
+  if (sig === dashTilesPaintSig) return;
+  dashTilesPaintSig = sig;
   document.querySelectorAll('[data-featacc]').forEach((el) => { el.checked = featOnFor(el.dataset.featacc, acc); el.classList.remove('part'); });
   const who = $('dash-quick-who');
   if (who) {
@@ -1324,11 +1444,23 @@ function renderTilePicker() {
 // Eski isim: artik sadece gorunumu tazeler (deger featureAccounts'ta tutulur)
 function syncToggle() { applyFeatureUI(); }
 function persistJoin() { return save({ joinMessages: { commands: cfg.joinMessages.commands } }).then(renderJoinList); }
+function joinSwitchHtml(c, i) {
+  const sel = joinCmdAccounts(c);
+  const total = accIdList().length;
+  // Anahtar: master 'enabled' ACIK ve en az bir hesap secili ise yanar.
+  // "Kapat" (am-off) enabled=false yapar ama secimi SILMEZ; boylece rozet
+  // secili sayiyi gosterir, anahtar kapali durur, geri acinca ayni hesaplar gelir.
+  const on = c.enabled !== false && sel.length > 0;
+  const part = on && sel.length < total;
+  return `<label class="check tiny-check${part ? ' part' : ''}">`
+    + `<input type="checkbox" data-jen="${i}" ${on ? 'checked' : ''} />`
+    + `<i class="featn${sel.length ? '' : ' hidden'}">${sel.length}/${total}</i></label>`;
+}
 function renderJoinList() {
   const cmds = cfg.joinMessages.commands;
   $('join-list').innerHTML = cmds.length ? cmds.map((c, i) => `
     <div class="item">
-      <label class="check tiny-check"><input type="checkbox" data-jen="${i}" ${c.enabled ? 'checked' : ''} /></label>
+      ${joinSwitchHtml(c, i)}
       <span class="sub">${i + 1}</span>
       <div class="main"><div class="masked-wrap"><input type="text" data-jc="${i}" value="${attr(c.command)}" placeholder="/login ********" spellcheck="false" /></div></div>
       <input type="number" data-jd="${i}" value="${c.delay}" min="0" style="width:84px" title="${T('delaySec')}" />
@@ -1348,7 +1480,11 @@ function renderJoinList() {
     refreshMask(el);
   });
   $('join-list').querySelectorAll('[data-jd]').forEach((el) => { el.onchange = () => upd(Number(el.dataset.jd), 'delay', Number(el.value)); });
-  $('join-list').querySelectorAll('[data-jen]').forEach((el) => { el.onchange = () => upd(Number(el.dataset.jen), 'enabled', el.checked); });
+  $('join-list').querySelectorAll('[data-jen]').forEach((el) => {
+    const i = Number(el.dataset.jen);
+    el.onclick = (e) => { e.preventDefault(); openJoinCmdPicker(i); };
+    el.onkeydown = (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); openJoinCmdPicker(i); } };
+  });
   $('join-list').querySelectorAll('[data-jdel]').forEach((b) => {
     b.onclick = () => { cfg.joinMessages.commands.splice(Number(b.dataset.jdel), 1); persistJoin(); };
   });
@@ -1356,10 +1492,11 @@ function renderJoinList() {
   try { renderMacroOrder(); renderMacroPlan(); } catch (_) {}
 }
 
-/* ---- /login ve /register komutlarinda sifreyi gizleme ------------------- */
-// Komut "/login" veya "/register" ile basliyorsa ilk bosluktan sonrasi
-// yildizla gosterilir; sagdaki goz tusu ile gercek metin gorulebilir.
-const SECRET_CMD = /^\s*\/?(login|register|reg|l)\b/i;
+/* ---- Giris komutlarinda sifreyi gizleme --------------------------------- */
+// /login, /gir ve /register ile baslayan hem Giris Komutlari hem de iki sohbet
+// kutusunda ilk bosluktan sonraki bosluk disi karakterler yildizla gosterilir.
+// Sagdaki goz tusu gercek metni gecici olarak acar.
+const SECRET_CMD = /^\s*\/?(login|gir|register|reg|l)\b/i;
 
 function maskedValue(el) {
   return el.dataset.real !== undefined ? el.dataset.real : el.value;
@@ -1422,7 +1559,7 @@ function refreshMask(el, opts) {
     return;
   }
   const i = real.indexOf(' ');
-  const masked = real.slice(0, i + 1) + '*'.repeat(Math.max(0, real.length - i - 1));
+  const masked = real.slice(0, i + 1) + real.slice(i + 1).replace(/\S/g, '*');
   el.value = masked;
   el.dataset.masked = masked;
   if (opts.fromInput && cursor != null) {
@@ -1465,7 +1602,7 @@ window.TIPS = {
     physics: 'Bot fiziği: yürüme, düşme, çarpışma hesaplanır. Kapatırsan bot hiç hareket etmez ve işlemci kullanımı biraz azalır.',
     antiAfk: 'Sunucunun "hareketsiz" diye atmasını engeller: belirli aralıklarla yürür, zıplar, sağa sola bakar. '
       + 'Ayrıntılı ayarlar yanındaki dişli tuşunda.',
-    spawnerProtect: 'Bu ayar şu an kapalıdır ve deneme süreci tamamlanana kadar kullanılamaz.',
+    spawnerProtect: 'Güvenilir olmayan bir oyuncu algılama yarıçapına girince, seçilen yarıçaptaki spawnerları Ipeksi Dokunuşlu en iyi kazmayla kırar.',
     macroSpawner: 'Spawner AFK şu an kapalıdır ve deneme süreci tamamlanana kadar kullanılamaz.',
     autoReconnect: 'Bağlantı koparsa kendiliğinden yeniden bağlanır. Bekleme süresi ve deneme sayısı yanındaki dişli tuşunda.',
     joinMessages: 'Oyuna girdikten sonra sırayla komut/mesaj gönderir (örnek: /login şifre). GİRİŞ KOMUTLARI sayfasından düzenlenir.',
@@ -1509,7 +1646,7 @@ window.TIPS = {
     physics: 'Bot physics: walking, falling and collision are simulated. With it off the bot never moves and uses slightly less CPU.',
     antiAfk: 'Stops the server from kicking you for being idle: walks, jumps and looks around at intervals. '
       + 'Detailed options are behind the gear button next to it.',
-    spawnerProtect: 'This setting is currently unavailable until its testing period is complete.',
+    spawnerProtect: 'When an untrusted player enters the detection radius, breaks spawners in the selected radius with the best Silk Touch pickaxe.',
     macroSpawner: 'Spawner AFK is currently unavailable until its testing period is complete.',
     autoReconnect: 'Reconnects by itself if the connection drops. Delay and attempt count are behind the gear button.',
     joinMessages: 'Sends commands/messages in order after joining (e.g. /login password). Edit them on the JOIN MESSAGES page.',
@@ -2283,6 +2420,10 @@ function updateAutoSellMode(persist) {
 }
 
 function renderAutoSell() {
+  const sig = JSON.stringify([autoSellState.running, autoSellState.busy, autoSellState.cycles,
+    autoSellState.stacks, autoSellState.items, macroState.running, spawnerState.running, window.__lang]);
+  if (sig === autoSellPaintSig) return;
+  autoSellPaintSig = sig;
   const on = !!autoSellState.running;
   const st = $('as-state'); if (st) st.textContent = on ? T('macRunning') : T('macStopped');
   const dot = $('as-dot'); if (dot) dot.classList.toggle('on', on);
@@ -2723,6 +2864,16 @@ function paintSliderFill(el) {
   host.style.setProperty('--fill', Math.max(0, Math.min(100, pct)) + '%');
 }
 
+function paintSpawnerProtectCard() {
+  const card = $('sp-protect-card');
+  const pill = $('sp-protect-state');
+  if (!card || !pill || !cfg) return;
+  const on = featEnabled('spawnerProtect');
+  card.classList.toggle('is-active', on);
+  const text = pill.querySelector('b');
+  if (text) text.textContent = T(on ? 'active' : 'inactive');
+}
+
 function fillSpawnerProtect() {
   const s = (cfg && cfg.spawnerProtect) || {};
   const clamp = (v, lo, hi, dflt) => {
@@ -2757,6 +2908,7 @@ function fillSpawnerProtect() {
   }
   renderTrustedList();
   applyFeatureUI();
+  paintSpawnerProtectCard();
 }
 
 // Guvenilir kisiler: isim listesi (config.spawnerProtect.trusted)
@@ -2769,6 +2921,9 @@ function renderTrustedList() {
   if (!box) return;
   const arr = spTrustedArr();
   box.innerHTML = '';
+  if (!arr.length) {
+    box.innerHTML = `<div class="empty">${esc(T('spawnerTrustedEmpty'))}</div>`;
+  }
   arr.forEach((name, i) => {
     const row = document.createElement('div');
     row.className = 'item';
@@ -2808,31 +2963,63 @@ function renderTrustedList() {
 async function renderLogHistory() {
   logBox.innerHTML = '';
   seenLogIds.clear();
-  (await bridge.logs.all()).forEach(addLogLine);
+  appendLogBatch(await bridge.logs.all());
 }
 
 const logBox = $('log-box');
 const seenLogIds = new Set();          // ayni log satiri iki kez eklenmesin
-function addLogLine(e) {
+function appendLogBatch(entries) {
+  if (!Array.isArray(entries) || !entries.length) return;
   const stickLog = atChatBottom(logBox);
-  if (!e) return;
-  if (e.id !== undefined) {
-    if (seenLogIds.has(e.id)) return;
-    seenLogIds.add(e.id);
-    if (seenLogIds.size > 1500) seenLogIds.clear();
+  const frag = document.createDocumentFragment();
+  let unreadChanged = false;
+  for (const e of entries) {
+    if (!e) continue;
+    if (e.id !== undefined) {
+      if (seenLogIds.has(e.id)) continue;
+      seenLogIds.add(e.id);
+      if (seenLogIds.size > 1500) seenLogIds.clear();
+    }
+    if (!logFilters.has(e.level)) continue;
+    const slot = Number(e.slot) || 0;
+    // Seçili oturum varsa diğerlerini çizme; sekme rozetini toplu güncelle.
+    if (logSlot && slot && slot !== logSlot) {
+      const before = unreadLog.size;
+      unreadLog.add(slot);
+      if (unreadLog.size !== before) unreadChanged = true;
+      continue;
+    }
+    const tag = (!logSlot && slot) ? `<span class="lvl">#${slot}</span>` : '';
+    const div = document.createElement('div');
+    div.className = 'line';
+    div.innerHTML = `<span class="time">[${e.time}]</span><span class="lvl lvl-${e.level}">[${e.level}]</span>${tag}<span class="msg">${esc(e.message)}</span>`;
+    frag.appendChild(div);
   }
-  if (!logFilters.has(e.level)) return;
-  const slot = Number(e.slot) || 0;
-  // Secili oturum varsa sadece o oturumun (ve uygulama geneli olan slot 0) satirlari
-  if (logSlot && slot && slot !== logSlot) { unreadLog.add(slot); renderSlotTabs(); return; }
-  const tag = (!logSlot && slot) ? `<span class="lvl">#${slot}</span>` : '';
-  const div = document.createElement('div');
-  div.className = 'line';
-  div.innerHTML = `<span class="time">[${e.time}]</span><span class="lvl lvl-${e.level}">[${e.level}]</span>${tag}<span class="msg">${esc(e.message)}</span>`;
-  logBox.appendChild(div);
+  if (unreadChanged) renderSlotTabs();
+  if (!frag.childNodes.length) return;
+  logBox.appendChild(frag);
   const logLimit = cfg && cfg.settings.memoryOptimization ? 400 : 800;
   while (logBox.childElementCount > logLimit) logBox.removeChild(logBox.firstChild);
   if (stickLog) snapChatToBottom(logBox);
+}
+
+function addLogLine(e) {
+  appendLogBatch(e ? [e] : []);
+}
+
+let pendingLogLines = [];
+let logFlushTimer = null;
+function queueLogLine(entry) {
+  if (!entry) return;
+  pendingLogLines.push(entry);
+  if (pendingLogLines.length > 400) pendingLogLines.splice(0, pendingLogLines.length - 400);
+  if (logFlushTimer) return;
+  logFlushTimer = setTimeout(() => {
+    logFlushTimer = null;
+    const batch = pendingLogLines;
+    pendingLogLines = [];
+    appendLogBatch(batch);
+  }, 50);
 }
 
 /* ============================== SETTINGS ================================== */
@@ -2922,13 +3109,16 @@ function applyState(s) {
   const online = s.status === 'ONLINE';
   const dotCls = online ? 'on' : s.status === 'CONNECTING' ? 'wait' : '';
   const pill = $('pill-status');
-  pill.className = 'pill ' + (online ? 'online' : s.status === 'CONNECTING' ? 'connecting' : '');
-  pill.innerHTML = `<i class="dot ${dotCls}"></i><b>${s.status}</b>`;
+  if (pillStatusSig !== s.status) {
+    pillStatusSig = s.status;
+    pill.className = 'pill ' + (online ? 'online' : s.status === 'CONNECTING' ? 'connecting' : '');
+    pill.innerHTML = `<i class="dot ${dotCls}"></i><b>${s.status}</b>`;
+  }
   refreshTopChips();
   const sdot = $('stat-dot'); if (sdot) sdot.classList.toggle('on', online);
-  $('sb-ping').textContent = online ? s.ping + ' ms' : '-';
+  setTextIfChanged($('sb-ping'), online ? s.ping + ' ms' : '-');
   $('spam-badge').classList.toggle('hidden', !s.spam);
-  const qs = $('q-spam'); if (qs) qs.textContent = s.spam ? T('qSpamStop') : T('qSpamStart');
+  setTextIfChanged($('q-spam'), s.spam ? T('qSpamStop') : T('qSpamStart'));
   $('c-connect').disabled = s.status === 'CONNECTING';
   refreshDashboard();
   if ($('page-screen') && $('page-screen').classList.contains('active')) refreshLiveScreen();
@@ -2944,6 +3134,10 @@ function serverLabel() { return (cfg && cfg.connection.host) || '-'; }
 
 function refreshTopChips() {
   const list = slotInfo.list || [];
+  const sig = JSON.stringify([state.account, state.server, serverLabel(), window.__lang,
+    list.map((x) => [x.slot, x.accountId, x.name, x.server, x.status])]);
+  if (sig === topChipsSig) return;
+  topChipsSig = sig;
   const names = list.map((x) => x.name || accNameOf(x.accountId)).filter(Boolean);
   const servers = list.map((x) => x.server || serverLabel()).filter(Boolean);
   const uniqServers = [...new Set(servers)];
@@ -3018,17 +3212,17 @@ function refreshDashboard() {
   const online = state.status === 'ONLINE';
   const nd = $('now-dot');
   if (nd) nd.className = 'now-dot ' + (online ? 'on' : state.status === 'CONNECTING' ? 'wait' : '');
-  const ns = $('now-status'); if (ns) ns.textContent = state.status;
-  const nsv = $('now-server'); if (nsv) nsv.textContent = (state.server && state.server !== '-') ? state.server : serverLabel();
-  const dp = $('d-ping'); if (dp) dp.textContent = online ? state.ping + ' ms' : '-';
-  const dc = $('d-count'); if (dc) dc.textContent = String((slotInfo.list || []).length);
+  const ns = $('now-status'); setTextIfChanged(ns, state.status);
+  const nsv = $('now-server'); setTextIfChanged(nsv, (state.server && state.server !== '-') ? state.server : serverLabel());
+  const dp = $('d-ping'); setTextIfChanged(dp, online ? state.ping + ' ms' : '-');
+  const dc = $('d-count'); setTextIfChanged(dc, (slotInfo.list || []).length);
   renderDashSessions();
   const note = $('dash-chat-note');
   if (note) {
     const cur = (slotInfo.list || []).find((x) => x.slot === effChatSlot());
-    note.textContent = cur ? ('#' + cur.slot + ' ' + (cur.name || '')) : '-';
+    setTextIfChanged(note, cur ? ('#' + cur.slot + ' ' + (cur.name || '')) : '-');
   }
-  const qs = $('q-spam'); if (qs) qs.textContent = state.spam ? T('qSpamStop') : T('qSpamStart');
+  setTextIfChanged($('q-spam'), state.spam ? T('qSpamStop') : T('qSpamStart'));
   paintDashTiles();
 }
 
@@ -3036,11 +3230,15 @@ function renderDashSessions() {
   const box = $('dash-list'); if (!box) return;
   const list = slotInfo.list || [];
   const sig = JSON.stringify([
-    effChatSlot(),
-    list.map((x) => [x.slot, x.name, x.status, x.ping])
+    effChatSlot(), window.__lang,
+    list.map((x) => [x.slot, x.name, x.status])
   ]);
-  if (sig === dashSessionsSig) return;
+  if (sig === dashSessionsSig) {
+    for (const x of list) setTextIfChanged(dashSessionRows.get(x.slot), x.status + (x.ping ? ' · ' + x.ping + ' ms' : ''));
+    return;
+  }
   dashSessionsSig = sig;
+  dashSessionRows.clear();
   box.innerHTML = list.length ? list.map((x) => `
     <div class="item ${x.slot === effChatSlot() ? 'selected' : ''}" data-dslot="${x.slot}">
       <i class="dot ${liveCls(x.status)}"></i>
@@ -3051,6 +3249,7 @@ function renderDashSessions() {
       <button class="icon-btn del" data-doff="${x.slot}" title="${T('rowDisconnect')}">${window.ICON.power}</button>
     </div>`).join('') : `<div class="empty">${window.t('dashNoSession')}</div>`;
   box.querySelectorAll('[data-dslot]').forEach((row) => {
+    dashSessionRows.set(Number(row.dataset.dslot), row.querySelector('.sub'));
     row.onclick = (e) => {
       if (e.target.closest('[data-doff]')) return;
       selectChatSlot(Number(row.dataset.dslot));
@@ -3081,7 +3280,7 @@ bridge.on('slots', (d) => {
   if (!d) return;
   const before = (slotInfo.list || []).map((s) => s.slot);
   slotInfo = { list: d.list || [], active: Number(d.active) || 0 };
-  try { applyFeatureUI(); if (featPick || spamAct) renderFeatPicker(); } catch (_) {}
+  try { applyFeatureUI(); if (featPick || spamAct || joinPick) renderFeatPicker(); } catch (_) {}
   const now = slotInfo.list.map((s) => s.slot);
   const gone = before.some((n) => !now.includes(n));     // oturum kapandi mi?
   if (gone) { before.filter((n) => !now.includes(n)).forEach((n) => { unreadChat.delete(n); unreadLog.delete(n); }); }
@@ -3092,8 +3291,8 @@ bridge.on('slots', (d) => {
   if (cfg) renderAccountsIfChanged();
   if (gone) { renderLogHistory(); renderChatHistory(); }
 });
-bridge.on('log', (e) => addLogLine(e));
-bridge.on('chat', (m) => addChatLine(m));
+bridge.on('log', (e) => queueLogLine(e));
+bridge.on('chat', (m) => queueChatLine(m));
 bridge.on('notice', (n) => window.toast(n.message, n.type === 'ok' ? 'ok' : n.type === 'warn' ? 'warn' : 'error'));
 bridge.on('spam-state', (d) => {
   const active = (d && typeof d === 'object') ? !!d.active : !!d;
@@ -3147,6 +3346,10 @@ document.addEventListener('visibilitychange', () => {
 
 bridge.on('screen-open', (d) => {
   const slot = Number(d && d.slot) || 0;
+  // Sunucu sandık/menüsü açıldığında panel envanteri onun üstünde kalmasın.
+  // Yalnızca yerel modalı gizle; yeni açılan sunucu penceresine close paketi
+  // göndermek menüyü yanlışlıkla kapatabilirdi.
+  if (invOpen && (!slot || slot === invSlot)) hideInventoryModal();
   const page = $('page-screen');
   const macroPage = $('page-macrofarmer');
   const spawnerPage = $('page-macrospawner');
@@ -3227,9 +3430,9 @@ bridge.on('autosell-state', (d) => {
   renderAutoSell();
 });
 bridge.on('metrics', (m) => {
-  const c = $('sb-cpu'); if (c) c.textContent = m.cpu + '%';
-  const r1 = $('sb-ram'); if (r1) r1.textContent = m.ram + ' MB';
-  const r2 = $('d-ram'); if (r2) r2.textContent = m.ram + ' MB';
+  setTextIfChanged($('sb-cpu'), m.cpu + '%');
+  setTextIfChanged($('sb-ram'), m.ram + ' MB');
+  setTextIfChanged($('d-ram'), m.ram + ' MB');
 });
 bridge.on('msa-done', async (d) => {
   if (d && d.ok) {
@@ -3309,10 +3512,16 @@ async function doMicrosoftLogin() {
 }
 
 /* ======================= ENVANTER (PANEL) ================================= */
-// Secili hesabin envanteri: Q = 1 dusur, Ctrl+Q = yiginin tamamini dusur.
+// Paket 101: Minecraft'in gercek cursor/click semantikleri.
 let invOpen = false;
 let invSlot = null;     // aktif oturum numarasi
 let invSel = null;      // secili penceredeki slot (window slot)
+let invBusy = false;
+let invDragSlot = null;
+let invOpChain = Promise.resolve();
+let invCursorItem = null;
+let invMouseX = 0;
+let invMouseY = 0;
 
 function openInventory() {
   const slot = effChatSlot();
@@ -3331,31 +3540,87 @@ function openInventory() {
   if (sub) sub.textContent = '#' + slot + (who && who.textContent !== '-' ? ' · ' + who.textContent : '');
   refreshInventory();
 }
-function closeInventory() {
+function hideInventoryModal() {
   invOpen = false;
+  invSlot = null;
   invSel = null;
+  invDragSlot = null;
+  invCursorItem = null;
+  renderInventoryCursor(null);
+  hideItemTip();
+  document.querySelectorAll('#inv-modal .invcell').forEach((c) => c.classList.remove('dragging', 'drop-target'));
   const m = $('inv-modal');
   if (m) m.classList.add('hidden');
-  const st = $('inv-status');
-  if (st) st.textContent = '';
 }
-async function refreshInventory() {
+async function closeInventory() {
+  if (!invOpen) return;
+  const closingSlot = invSlot;
+  const hadCursor = !!(invCursorItem && !invCursorItem.empty);
+  // X/Escape/arka plana tıklama her durumda ANINDA kapatır. Kayıp transaction
+  // cevabını beklemek modalın 15-20 sn ekranda kilitli kalmasına yol açıyordu.
+  hideInventoryModal();
+  if (!hadCursor || closingSlot === null) return;
+  // Farede eşya varsa arka planda normal envantere geri koymayı dene. Modal
+  // bunun için yeniden açılmaz ve kapanış engellenmez.
+  try { await invOpChain; } catch (_) {}
+  let r;
+  try { r = await bridge.bot.inventoryOp(closingSlot, { type: 'return' }); } catch (_) { r = null; }
+  if (!r || !r.ok || (r.cursor && !r.cursor.empty)) window.toast(T('invCursorFull'), 'warn');
+}
+async function refreshInventory(silent = false) {
   const box = $('inv-modal');
-  if (!box || box.classList.contains('hidden') || !invOpen) return;
-  const status = $('inv-status');
-  if (status) status.textContent = T('invLoading');
+  if (!box || box.classList.contains('hidden') || !invOpen || invBusy) return;
   let r;
   try { r = await bridge.bot.inventoryGet(invSlot); } catch (e) { r = { ok: false, error: (e && e.message) || String(e) }; }
   if (!r || !r.ok) {
-    if (status) status.textContent = invErr(r);
+    if (!silent) window.toast(invErr(r), 'warn');
     return;
   }
-  renderInventoryGrid(r.slots || []);
-  if (status) status.textContent = r.windowOpen ? T('invWindowOpen') : '';
+  if (r.windowOpen) {
+    hideInventoryModal();
+    if (!silent) window.toast(T('invWindowOpen'), 'warn');
+    return;
+  }
+  applyInventoryState(r);
 }
+
+function applyInventoryState(r) {
+  invCursorItem = (r && r.cursor) || null;
+  renderInventoryGrid((r && r.slots) || []);
+  renderInventoryCursor(invCursorItem);
+}
+
+function invCursorElement() {
+  let el = $('inv-cursor-stack');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'inv-cursor-stack';
+    el.className = 'inv-cursor-stack hidden';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function renderInventoryCursor(item) {
+  const el = invCursorElement();
+  if (!item || item.empty || !item.name) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `<i class="ic" style="${iconStyle(item.name)}"></i>${item.count > 1 ? `<b class="cnt">${item.count}</b>` : ''}`;
+  el.style.left = invMouseX + 'px';
+  el.style.top = invMouseY + 'px';
+  el.classList.remove('hidden');
+}
+
 function renderInventoryGrid(slots) {
-  const zones = { armor: $('inv-armor'), main: $('inv-main'), hotbar: $('inv-hotbar'), offhand: $('inv-offhand') };
+  const zones = {
+    craftOut: $('inv-craft-out'), craft: $('inv-craft'),
+    armor: $('inv-armor'), main: $('inv-main'),
+    hotbar: $('inv-hotbar'), offhand: $('inv-offhand')
+  };
   Object.values(zones).forEach((el) => { if (el) el.innerHTML = ''; });
+  const armorGhost = { 5: 'helmet', 6: 'chest', 7: 'legs', 8: 'boots' };
   for (const s of slots || []) {
     const host = zones[s.zone];
     if (!host) continue;
@@ -3363,7 +3628,12 @@ function renderInventoryGrid(slots) {
     cell.type = 'button';
     cell.className = 'mcslot invcell' + (invSel === s.slot ? ' on' : '') + (s.empty ? '' : ' has');
     cell.dataset.slot = String(s.slot);
-    cell.title = s.empty ? '' : (T('invTip') + ' ' + (s.displayName || s.name) + (s.count > 1 ? ' ×' + s.count : ''));
+    cell.setAttribute('aria-label', s.empty ? '' : (T('invTip') + ' ' + (s.displayName || s.name) + (s.count > 1 ? ' ×' + s.count : '')));
+    if (s.empty && (s.zone === 'armor' || s.zone === 'offhand')) {
+      const ghost = document.createElement('i');
+      ghost.className = 'inv-ghost ' + (s.zone === 'offhand' ? 'shield' : (armorGhost[s.slot] || ''));
+      cell.appendChild(ghost);
+    }
     if (!s.empty && (s.name || s.displayName)) {
       const ic = document.createElement('i');
       ic.className = 'ic';
@@ -3375,8 +3645,74 @@ function renderInventoryGrid(slots) {
         cnt.textContent = s.count;
         cell.appendChild(cnt);
       }
+      cell.dataset.nm = s.displayName || s.name;
+      cell.dataset.sub = (s.name || '') + (s.count > 1 ? '  ×' + s.count : '');
+      cell.onmousemove = (ev) => showItemTip(cell, ev);
+      cell.onmouseleave = hideItemTip;
+      // Cursor'da zaten esya varken ikinci bir HTML surukleme baslatma;
+      // o durumda Minecraft'in normal sol/sag tik yerlestirmesi kullanilir.
+      cell.draggable = !invCursorItem || invCursorItem.empty;
+      cell.ondragstart = (ev) => {
+        invDragSlot = s.slot;
+        cell.classList.add('dragging');
+        hideItemTip();
+        try { ev.dataTransfer.setData('text/plain', String(s.slot)); } catch (_) {}
+        try { ev.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+      };
     }
-    cell.onclick = () => { invSel = s.slot; selectInvCell(cell); };
+    cell.onmouseenter = () => { invSel = s.slot; selectInvCell(cell); };
+    cell.onclick = (ev) => {
+      if (invDragSlot !== null || ev.detail > 1) return;
+      invSel = s.slot;
+      selectInvCell(cell);
+      const shift = !!ev.shiftKey;
+      // Bos uretim sonucuna tiklamak Mineflayer'da onay bekleyip 15-20 sn
+      // kilitlenebiliyordu. Minecraft'ta bu tik zaten hicbir sey yapmaz.
+      if (s.zone === 'craftOut' && s.empty) return;
+      runInventoryOp({ type: 'click', slot: s.slot, button: 0, mode: shift ? 1 : 0 });
+    };
+    cell.ondblclick = (ev) => {
+      ev.preventDefault();
+      if (s.zone === 'craftOut' && s.empty) return;
+      runInventoryOp({ type: 'double', slot: s.slot });
+    };
+    cell.oncontextmenu = (ev) => {
+      ev.preventDefault();
+      invSel = s.slot;
+      selectInvCell(cell);
+      if (s.zone === 'craftOut' && s.empty) return;
+      runInventoryOp({ type: 'click', slot: s.slot, button: 1, mode: 0 });
+    };
+    cell.onauxclick = (ev) => {
+      if (ev.button !== 1) return;
+      ev.preventDefault();
+      runInventoryOp({ type: 'click', slot: s.slot, button: 2, mode: 3 });
+    };
+    cell.ondragover = (ev) => {
+      if (invDragSlot === null) return;
+      ev.preventDefault();
+      cell.classList.add('drop-target');
+      try { ev.dataTransfer.dropEffect = 'move'; } catch (_) {}
+    };
+    cell.ondragleave = () => cell.classList.remove('drop-target');
+    cell.ondrop = (ev) => {
+      ev.preventDefault();
+      cell.classList.remove('drop-target');
+      let from = invDragSlot;
+      try {
+        const raw = Number(ev.dataTransfer.getData('text/plain'));
+        if (Number.isInteger(raw)) from = raw;
+      } catch (_) {}
+      invDragSlot = null;
+      document.querySelectorAll('#inv-modal .invcell').forEach((c) => c.classList.remove('dragging', 'drop-target'));
+      if (Number.isInteger(from) && from !== s.slot) {
+        runInventoryOp({ type: 'move', from, to: s.slot, half: !!ev.altKey });
+      }
+    };
+    cell.ondragend = () => {
+      invDragSlot = null;
+      document.querySelectorAll('#inv-modal .invcell').forEach((c) => c.classList.remove('dragging', 'drop-target'));
+    };
     host.appendChild(cell);
   }
 }
@@ -3386,22 +3722,53 @@ function selectInvCell(el) {
 async function invAct(action) {
   if (!invOpen || invSlot === null) return;
   if (invSel === null) {
-    const st = $('inv-status');
-    if (st) st.textContent = T('invPickFirst');
+    window.toast(T('invPickFirst'), 'warn');
     return;
   }
-  const st = $('inv-status');
-  if (st) st.textContent = T('invBusy');
-  let r;
-  try { r = await bridge.bot.inventoryDrop(invSlot, invSel, action); } catch (e) { r = { ok: false, error: (e && e.message) || String(e) }; }
-  if (st) st.textContent = (!r || !r.ok) ? invErr(r) : '';
-  await refreshInventory();
+  await runInventoryOp({ type: 'click', slot: invSel, button: action === 'all' ? 1 : 0, mode: 4 });
 }
+
+function runInventoryOp(op, quiet = false) {
+  if (!invOpen || invSlot === null) return Promise.resolve(null);
+  // Minecraft tiklamalari siralidir. Hızlı/cift tiklari reddetmek yerine
+  // aninda kuyruğa al; boylece ilk tik 190 ms beklemez ve paketler cakışmaz.
+  const task = async () => {
+    if (!invOpen || invSlot === null) return null;
+    invBusy = true;
+    let r;
+    try {
+      r = await bridge.bot.inventoryOp(invSlot, op);
+    } catch (e) {
+      r = { ok: false, error: (e && e.message) || String(e) };
+    } finally {
+      invBusy = false;
+    }
+    // Kullanıcı işlem sürerken modalı kapattıysa geç gelen cevap cursor
+    // görüntüsünü yeniden canlandırmasın.
+    if (!invOpen) return r;
+    if (r && r.ok) {
+      if (r.windowOpen) {
+        hideInventoryModal();
+        if (!quiet) window.toast(T('invWindowOpen'), 'warn');
+        return r;
+      }
+      applyInventoryState(r);
+    } else if (!quiet) {
+      window.toast(invErr(r), 'warn');
+    }
+    return r;
+  };
+  invOpChain = invOpChain.then(task, task);
+  return invOpChain;
+}
+
 function invErr(r) {
   const e = (r && r.error) || '?';
   if (e === 'empty') return T('invEmpty');
   if (e === 'window_open') return T('invWindowOpen');
   if (e === 'no_bot' || e === 'no_session') return T('invNoBot');
+  if (e === 'inventory_timeout') return T('invTimeout');
+  if (e === 'cursor_full' || e === 'cursor_stuck') return T('invCursorFull');
   return T('invFail') + ' ' + e;
 }
 
@@ -3418,12 +3785,27 @@ function bindStatic() {
   if (invCl) invCl.onclick = () => closeInventory();
   const invMod = $('inv-modal');
   if (invMod) invMod.addEventListener('click', (e) => { if (e.target === invMod) closeInventory(); });
+  document.addEventListener('mousemove', (e) => {
+    invMouseX = e.clientX;
+    invMouseY = e.clientY;
+    const cur = $('inv-cursor-stack');
+    if (cur && !cur.classList.contains('hidden')) {
+      cur.style.left = invMouseX + 'px';
+      cur.style.top = invMouseY + 'px';
+    }
+  });
   document.addEventListener('keydown', (e) => {
     const im = $('inv-modal');
     if (!im || im.classList.contains('hidden')) return;
     if (e.key === 'q' || e.key === 'Q') {
       e.preventDefault();
       invAct(e.ctrlKey ? 'all' : 'one');
+    } else if (/^[1-9]$/.test(e.key) && invSel !== null) {
+      e.preventDefault();
+      runInventoryOp({ type: 'click', slot: invSel, button: Number(e.key) - 1, mode: 2 });
+    } else if ((e.key === 'f' || e.key === 'F') && invSel !== null) {
+      e.preventDefault();
+      runInventoryOp({ type: 'click', slot: invSel, button: 40, mode: 2 });
     }
   });
   // Chat
@@ -3446,7 +3828,10 @@ function bindStatic() {
         await completeChatInput(inputId);
       }
     });
-    el.addEventListener('input', () => resetChatTab(inputId));
+    el.addEventListener('input', () => {
+      refreshMask(el, { fromInput: true });
+      resetChatTab(inputId);
+    });
   };
   bindChatInput('dash-chat-input');
   $('chat-clear').onclick = () => {
@@ -3504,7 +3889,7 @@ function bindStatic() {
   // Join messages
   $('join-add').onclick = () => {
     if (!cfg) return;
-    cfg.joinMessages.commands.push({ command: '', delay: 2, enabled: true });
+    cfg.joinMessages.commands.push({ command: '', delay: 2, enabled: true, accounts: featList('joinMessages') });
     persistJoin();
   };
   $('join-run').onclick = async () => {
@@ -3573,14 +3958,14 @@ function bindStatic() {
   bindSbPop('sb-server-btn', 'sb-server-pop');
   bindSbPop('sb-account-btn', 'sb-account-pop');
   // --- Hesap secme penceresi -----------------------------------------------
-  const amSave = $('am-save'); if (amSave) amSave.onclick = () => { if (vpnPick) commitVpnPicker(); else if (spamAct) commitSpamAct(); else if (featPick) commitFeatPicker(featPick.sel.slice()); };
+  const amSave = $('am-save'); if (amSave) amSave.onclick = () => { if (vpnPick) commitVpnPicker(); else if (spamAct) commitSpamAct(); else if (joinPick) commitJoinPicker(joinPick.sel.slice()); else if (featPick) commitFeatPicker(featPick.sel.slice()); };
   // secimi silmeden kapat
-  const amOff = $('am-off'); if (amOff) amOff.onclick = () => { if (featPick) commitFeatPicker(featPick.sel.slice(), false); };
-  const amAll = $('am-all'); if (amAll) amAll.onclick = () => { if (vpnPick) { vpnPick.sel = accIdList(); renderVpnAccountPicker(); } else if (spamAct) { spamAct.sel = accIdList(); renderFeatPicker(); } else if (featPick) { featPick.sel = accIdList(); renderFeatPicker(); } };
-  const amNone = $('am-none'); if (amNone) amNone.onclick = () => { if (vpnPick) { vpnPick.sel = []; renderVpnAccountPicker(); } else if (spamAct) { spamAct.sel = []; renderFeatPicker(); } else if (featPick) { featPick.sel = []; renderFeatPicker(); } };
-  const amCan = $('am-cancel'); if (amCan) amCan.onclick = () => { if (vpnPick) closeVpnAccountPicker(); else if (spamAct) closeSpamActPicker(); else closeFeatPicker(); };
+  const amOff = $('am-off'); if (amOff) amOff.onclick = () => { if (joinPick) commitJoinPicker(joinPick.sel.slice(), false); else if (featPick) commitFeatPicker(featPick.sel.slice(), false); };
+  const amAll = $('am-all'); if (amAll) amAll.onclick = () => { if (vpnPick) { vpnPick.sel = accIdList(); renderVpnAccountPicker(); } else if (spamAct) { spamAct.sel = accIdList(); renderFeatPicker(); } else if (joinPick) { joinPick.sel = accIdList(); renderFeatPicker(); } else if (featPick) { featPick.sel = accIdList(); renderFeatPicker(); } };
+  const amNone = $('am-none'); if (amNone) amNone.onclick = () => { if (vpnPick) { vpnPick.sel = []; renderVpnAccountPicker(); } else if (spamAct) { spamAct.sel = []; renderFeatPicker(); } else if (joinPick) { joinPick.sel = []; renderFeatPicker(); } else if (featPick) { featPick.sel = []; renderFeatPicker(); } };
+  const amCan = $('am-cancel'); if (amCan) amCan.onclick = () => { if (vpnPick) closeVpnAccountPicker(); else if (spamAct) closeSpamActPicker(); else if (joinPick) closeJoinCmdPicker(); else closeFeatPicker(); };
   const amMod = $('acc-modal');
-  if (amMod) amMod.addEventListener('click', (e) => { if (e.target !== amMod) return; if (vpnPick) closeVpnAccountPicker(); else if (spamAct) closeSpamActPicker(); else closeFeatPicker(); });
+  if (amMod) amMod.addEventListener('click', (e) => { if (e.target !== amMod) return; if (vpnPick) closeVpnAccountPicker(); else if (spamAct) closeSpamActPicker(); else if (joinPick) closeJoinCmdPicker(); else closeFeatPicker(); });
   const vpnSettingsMod = $('vpn-settings-modal'); if (vpnSettingsMod) vpnSettingsMod.addEventListener('click', (e) => { if (e.target === vpnSettingsMod) closeVpnSettings(); });
   const vpnCountryMod = $('vpn-country-modal'); if (vpnCountryMod) vpnCountryMod.addEventListener('click', (e) => { if (e.target === vpnCountryMod) vpnCountryMod.classList.add('hidden'); });
   // --- PANEL'e ayar sabitleme ---------------------------------------------
@@ -3600,6 +3985,7 @@ function bindStatic() {
     if (e.key !== 'Escape') return;
     if (vpnPick) closeVpnAccountPicker();
     else if (spamAct) closeSpamActPicker();
+    else if (joinPick) closeJoinCmdPicker();
     else if (featPick) closeFeatPicker();
     if (tilePick) closeTilePicker();
     if ($('inv-modal') && !$('inv-modal').classList.contains('hidden')) closeInventory();
