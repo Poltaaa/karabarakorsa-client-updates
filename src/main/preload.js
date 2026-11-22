@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld('api', {
     macroStop: (slot) => ipcRenderer.invoke('macro:stop', slot),
     macroPeek: (slot, silent) => ipcRenderer.invoke('macro:peek', { slot, silent: !!silent }),
     screenClick: (slot, index, button) => ipcRenderer.invoke('macro:screen-click', { slot, index, button }),
+    spawnerStart: (slot) => ipcRenderer.invoke('spawner:start', slot),
+    spawnerStop: (slot) => ipcRenderer.invoke('spawner:stop', slot),
+    autoSellStart: (slot) => ipcRenderer.invoke('autosell:start', slot),
+    autoSellStop: (slot) => ipcRenderer.invoke('autosell:stop', slot),
     ping: (payload) => ipcRenderer.invoke('bot:ping', payload),
     sneak: (on) => ipcRenderer.invoke('bot:sneak', on),
     physics: (on) => ipcRenderer.invoke('bot:physics', on),
@@ -36,7 +40,21 @@ contextBridge.exposeInMainWorld('api', {
     setActive: (slot) => ipcRenderer.invoke('bot:active', slot),
     chatHistory: (slot) => ipcRenderer.invoke('chat:history', slot),
     players: (slot) => ipcRenderer.invoke('bot:players', slot),
-    tabComplete: (query, slot) => ipcRenderer.invoke('bot:tab-complete', { query, slot })
+    tabComplete: (query, slot) => ipcRenderer.invoke('bot:tab-complete', { query, slot }),
+    inventoryGet: (slot) => ipcRenderer.invoke('bot:inventory-get', slot),
+    inventoryDrop: (slot, winSlot, action) => ipcRenderer.invoke('bot:inventory-drop', { slot, winSlot, action }),
+    inventoryOp: (session, op) => ipcRenderer.invoke('bot:inventory-op', { session, op })
+  },
+  autoBuild: {
+    setAutoPass: (slot, enabled) => ipcRenderer.invoke('autobuild:auto-pass', { slot, enabled }),
+    catalog: (slot) => ipcRenderer.invoke('autobuild:catalog', slot),
+    state: (slot) => ipcRenderer.invoke('autobuild:state', slot),
+    position: (slot) => ipcRenderer.invoke('autobuild:position', slot),
+    preview: (slot, spec) => ipcRenderer.invoke('autobuild:preview', { slot, spec }),
+    start: (slot, spec) => ipcRenderer.invoke('autobuild:start', { slot, spec }),
+    pause: (slot) => ipcRenderer.invoke('autobuild:pause', slot),
+    resume: (slot) => ipcRenderer.invoke('autobuild:resume', slot),
+    stop: (slot) => ipcRenderer.invoke('autobuild:stop', slot)
   },
   accounts: {
     add: (a) => ipcRenderer.invoke('accounts:add', a),
@@ -74,8 +92,8 @@ contextBridge.exposeInMainWorld('api', {
   },
   diag: (msg) => ipcRenderer.invoke('diag', msg),
   on: (channel, cb) => {
-    const allowed = ['log', 'status', 'chat', 'metrics', 'spam-state', 'macro-state', 'msa-done', 'notice',
-      'win-state', 'dialog', 'dialog-close', 'screen-open', 'screen-close', 'config-changed', 'slots', 'refresh',
+    const allowed = ['log', 'status', 'chat', 'metrics', 'spam-state', 'macro-state', 'spawner-state', 'autosell-state', 'autobuild-state', 'msa-done', 'notice',
+      'win-state', 'dialog', 'dialog-close', 'screen-open', 'screen-close', 'config-changed', 'slots', 'refresh', 'tor-state',
       'update-state', 'update-progress', 'update-downloaded', 'update-error'];
     if (!allowed.includes(channel)) return () => {};
     const handler = (_e, data) => cb(data);

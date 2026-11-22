@@ -5,14 +5,17 @@ const tls = require('tls');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { EventEmitter } = require('events');
 
-class TorController {
+class TorController extends EventEmitter {
   constructor(logger) {
+    super();
     this.logger = logger; this.proc = null; this.port = 9050; this.controlPort = 9051;
     this.dataDir = null; this.country = ''; this.strictNodes = false; this.lastIp = ''; this.stopping = null; this.lastProcessError = '';
   }
   isRunning() { return !!this.proc && !this.proc.killed; }
   status() { return { running: this.isRunning(), socksHost: '127.0.0.1', socksPort: this.port, country: this.country || 'any', ip: this.lastIp || '' }; }
+  emitState() { try { this.emit('state', this.status()); } catch (_) {} }
   bundleRoot() {
     const candidates = [path.join(process.resourcesPath || '', 'tor'), path.join(__dirname, '..', '..', 'resources', 'tor'), path.join(process.cwd(), 'resources', 'tor')];
     return candidates.find((p) => p && fs.existsSync(path.join(p, 'tor.exe'))) || '';
@@ -47,7 +50,11 @@ class TorController {
     this.proc = proc;
     proc.stdout.on('data', (b) => { const text = String(b).trim(); if (text) { this.lastProcessError = /error|fatal|fail|unable|could not|cannot/i.test(text) ? text : this.lastProcessError; this.logger.info('[VPN] ' + text); } });
     proc.stderr.on('data', (b) => { const text = String(b).trim(); if (text) { if (/error|fatal|fail|unable|could not|cannot/i.test(text)) this.lastProcessError = text.split('\n').filter(Boolean).slice(-1)[0]; this.logger.warn('[VPN] ' + text); } });
-    proc.on('exit', (code, signal) => { if (this.proc === proc) this.proc = null; if (code && !this.lastProcessError) this.lastProcessError = `VPN motoru kapandı (kod ${code}${signal ? ', ' + signal : ''}).`; });
+    proc.on('exit', (code, signal) => {
+      if (this.proc === proc) this.proc = null;
+      if (code && !this.lastProcessError) this.lastProcessError = `VPN motoru kapandı (kod ${code}${signal ? ', ' + signal : ''}).`;
+      this.emitState();
+    });
     try {
       await this.waitForControl();
       if (opts.countries && opts.countries.length) await this.setCountry(opts.countries, opts.strictNodes);
@@ -67,6 +74,7 @@ class TorController {
       this.stopping = new Promise((resolve) => { const done = () => resolve(); p.once('exit', done); setTimeout(done, 2500); });
       try { p.kill(); } catch (_) {}
     }
+    this.emitState();
     return this.status();
   }
   async pickPorts() {

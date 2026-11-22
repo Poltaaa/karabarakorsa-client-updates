@@ -48,6 +48,7 @@ class MacroFarmer {
     this.actionId = 30000;        // <=1.16 islem numarasi (ham paket icin)
     this.itemApi = null;
     this.itemApiVer = '';
+    this._lastClickAt = 0;        // paket 77: tiklama paketleri arasi asgari sure
   }
 
   L(tr, en) { return this.logger.L(tr, en); }
@@ -222,13 +223,23 @@ class MacroFarmer {
 
     let sent = false;
     let note = '';
+    // Paket 77: gecikmesi 0 olan ard arda adimlar tiklamayi yigmasin (yuksek
+    // pingde window_click paketleri ust uste binip sunucular "paket tufani"
+    // kick'i atiyordu). Ard arda iki tiklama en az 450 ms arayla gider.
+    {
+      const tNow = Date.now();
+      if (this._lastClickAt && tNow - this._lastClickAt < 450) await wait(450 - (tNow - this._lastClickAt));
+      this._lastClickAt = tNow;
+    }
     if (this.opts.rawClick) {
       sent = this.rawClick(win, slot, c.button, c.mode);
       note = this.L('ham paket', 'raw packet');
     } else {
       try {
-        // Onay beklemesi kisitli: menu eklentilerinde sunucu onay gondermez
-        await this.withTimeout(bot.clickWindow(slot, c.button, c.mode), 1500);
+        // Onay beklemesi kisitli: menu eklentilerinde sunucu onay gondermez.
+        // Paket 77: yuksek pingde onay gec geliyor -> sure 2,5 sn (5 sn'ye kadar
+        // yigilmayi onler; onay gelmemesi yine hata sayilmaz).
+        await this.withTimeout(bot.clickWindow(slot, c.button, c.mode), 2500);
         sent = true;
       } catch (e) {
         const msg = (e && e.message) ? String(e.message) : String(e);
