@@ -15,7 +15,6 @@ const BotManager = require('./bot/bot-manager');
 const versions = require('./versions');
 const updater = require('./updater');
 const TorController = require('./tor-controller');
-const BUILD_INFO = require('./build-info');
 
 let win = null;
 let tray = null;
@@ -26,17 +25,12 @@ let quitting = false;
 let tor = null;
 
 const APP_NAME = 'Karabarakorsa AFK Client';
-// Spawner AFK deneme boyunca kilitli kalır. Spawner Koruma Paket 85 ile
-// yeniden açıldı; hesap seçimi ve çalışma durumu normal özellik akışındadır.
-const FORCED_DISABLED_FEATURES = new Set(['macroSpawner']);
 
 // Windows bildirimlerinde "electron.app..." yazmamasi icin uygulama kimligi
 app.setName(APP_NAME);
 try { app.setAppUserModelId('com.karabarakorsa.afkclient'); } catch (_) {}
-// Mineflayer dünya/chunk verisi oyun açılırken kısa sürede yüzlerce MB'a
-// çıkabilir. Eski 256 MB sınırı V8'i sürekli tam GC yapmaya zorluyor ve Electron
-// arayüzünü saniyelerce dondurabiliyordu. Kontrollü ama gerçekçi bir pay bırak.
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=768 --expose-gc');
+// Bellek: V8 yigini sinirli tutulur, GC daha sik calisir (akicilik bozulmaz)
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=256 --expose-gc');
 app.commandLine.appendSwitch('disable-features', 'MediaSessionService,HardwareMediaKeyHandling');
 
 // Dil: arayuzde secili dile gore ana surec metinleri
@@ -262,8 +256,7 @@ function slotList() {
       ping: st.ping || 0,
       spam: !!st.spam,
       antiAfk: !!st.antiAfk,
-      macro: !!st.macro,
-      autoSell: !!st.autoSell
+      macro: !!st.macro
     };
   });
 }
@@ -293,9 +286,6 @@ function wireSession(s) {
   });
   b.on('spam-state', (a) => { send('spam-state', { slot: s.slot, active: a }); sendSlots(); });
   b.on('macro-state', (st) => { send('macro-state', Object.assign({ slot: s.slot }, st)); sendSlots(); });
-  b.on('spawner-state', (st) => { send('spawner-state', Object.assign({ slot: s.slot }, st)); sendSlots(); });
-  b.on('autobuild-state', (st) => { send('autobuild-state', Object.assign({ slot: s.slot }, st)); });
-  b.on('autosell-state', (st) => { send('autosell-state', Object.assign({ slot: s.slot }, st)); sendSlots(); });
   b.on('screen-open', (d) => send('screen-open', Object.assign({ slot: s.slot }, d || {})));
   b.on('screen-close', () => send('screen-close', { slot: s.slot }));
   b.on('dialog', (d) => {
@@ -335,8 +325,7 @@ function removeSession(slot) {
   return { ok: true, removed: s.slot };
 }
 
-// Bot kendi kendine cevrimdisi kaldiysa (ve yeniden baglanma beklemiyorsa) oturumu kapat.
-// Hesap oyundan cikinca mesajlar ve loglar 10 sn daha gorunur kalir, SONRA silinir.
+// Bot kendi kendine cevrimdisi kaldiysa (ve yeniden baglanma beklemiyorsa) oturumu kapat
 function scheduleSessionCleanup(s) {
   if (s.cleanupTimer) clearTimeout(s.cleanupTimer);
   s.cleanupTimer = setTimeout(() => {
@@ -345,7 +334,7 @@ function scheduleSessionCleanup(s) {
     const b = s.bot;
     if (!b || b.status !== 'OFFLINE' || b.reconnectTimer) return;
     removeSession(s.slot);
-  }, 10000);
+  }, 2500);
 }
 
 function createSession(account) {
@@ -383,11 +372,7 @@ function hideToBackground() {
 }
 
 function offlineState() {
-  return {
-    slot: 0, status: 'OFFLINE', server: '', account: '', ping: 0, uptime: 0,
-    spam: false, antiAfk: false, macro: false, spawnerMacro: false, autoSell: false,
-    autoSellState: { running: false, busy: false, cycles: 0, stacks: 0, items: 0, nextAt: 0 }
-  };
+  return { slot: 0, status: 'OFFLINE', server: '', account: '', ping: 0, uptime: 0, spam: false, antiAfk: false };
 }
 
 function disconnectAll() {
@@ -400,8 +385,6 @@ function disconnectAll() {
 // paylasilan sayfalari (DLL, font, GPU dokusu) her surecte tekrar saydigi icin
 // gercek kullanimin 2-3 katini gosteriyordu.
 let cpuLast = 0;
-const METRICS_CORES = Math.max(1, os.cpus().length);
-const METRICS_TOTAL_RAM = Math.round(os.totalmem() / 1024 / 1024);
 function stopMetrics() { if (metricsTimer) { clearInterval(metricsTimer); metricsTimer = null; } }
 function readMetrics() {
   let priv = 0;
@@ -420,13 +403,14 @@ function readMetrics() {
   // privateBytes Windows'ta gelir; gelmezse calisma kumesini kullaniriz
   let ram = priv || ws;
   if (!ram) { try { ram = Math.round(process.memoryUsage().rss / 1024); } catch (_) {} }
-  cpu = Math.min(100, cpu / METRICS_CORES);
+  const cores = Math.max(1, os.cpus().length);
+  cpu = Math.min(100, cpu / cores);
   // kucuk yumusatma: deger zipzip degil, akici gorunsun
   cpuLast = cpuLast ? cpuLast * 0.45 + cpu * 0.55 : cpu;
   return {
     cpu: Math.round(cpuLast * 10) / 10,
     ram: Math.round(ram / 1024),
-    totalRam: METRICS_TOTAL_RAM
+    totalRam: Math.round(os.totalmem() / 1024 / 1024)
   };
 }
 function startMetrics() {
@@ -438,28 +422,16 @@ function startMetrics() {
 }
 
 // --- Canli durum akisi -----------------------------------------------------
-// Poll cheaply for real changes; uptime already advances locally in renderer.
-// Do not trigger a full renderer status repaint for an unchanged second.
+// Bot durumu sadece degistiginde yayinlanirsa ping/sure arayuzde donuk kalir.
+// Bu yuzden aktif oturumun durumu saniyede bir tazelenir.
 let statePump = null;
-let lastPumpedStateSignature = '';
-function stateUiSignature(st) {
-  const copy = { ...st };
-  delete copy.uptime; // Renderer already has a cheap local uptime clock.
-  return JSON.stringify(copy);
-}
 function startStatePump() {
-  lastPumpedStateSignature = '';
   if (statePump) clearInterval(statePump);
   statePump = setInterval(() => {
     if (!win || win.isDestroyed() || !win.isVisible()) return;
     if (!sessions.length) return;
     const b = botBySlot(activeSlot) || (sessions[0] && sessions[0].bot);
-    if (!b) return;
-    const payload = Object.assign({ slot: activeSlot }, b.state());
-    const sig = stateUiSignature(payload);
-    if (sig === lastPumpedStateSignature) return;
-    lastPumpedStateSignature = sig;
-    win.webContents.send('status', payload);
+    if (b) win.webContents.send('status', Object.assign({ slot: activeSlot }, b.state()));
   }, 1000);
 }
 
@@ -515,12 +487,9 @@ function migrateUserData() {
 // ---------------------------------------------------------------------------
 app.whenReady().then(async () => {
   migrateUserData();
-  logger.enableDiagnostics(path.join(app.getPath('userData'),'logs'));
   store = new Store();
   tor = new TorController(logger);
-  tor.on('state', (st) => send('tor-state', liveVpnStatus(st)));
   logger.setLang(store.get().settings.language);
-  logger.info(`Karabarakorsa v${app.getVersion()} · Paket ${BUILD_INFO.package}`);
   const authDir = path.join(app.getPath('userData'), 'auth-cache');
   if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
 
@@ -533,16 +502,7 @@ app.whenReady().then(async () => {
   createTray();
   startMetrics();
   startStatePump();
-  if (store.get().tor && store.get().tor.enabled === true && store.get().tor.connectionEnabled === true) {
-    try {
-      await tor.start({ countries: store.get().tor.countries || [], strictNodes: !!store.get().tor.strictNodes });
-      send('tor-state', liveVpnStatus());
-    } catch (e) {
-      logger.warn('[VPN] ' + e.message);
-      store.patch({ tor: { enabled: false, connectionEnabled: false } });
-      send('tor-state', liveVpnStatus());
-    }
-  }
+  if (store.get().tor && store.get().tor.enabled === true && store.get().tor.connectionEnabled === true) { try { await tor.start({ countries: store.get().tor.countries || [], strictNodes: !!store.get().tor.strictNodes }); } catch (e) { logger.warn('[VPN] ' + e.message); store.patch({ tor: { enabled: false } }); } }
   applyAutoLaunch(store.get().settings.startWithWindows);
   writeDiag(`${APP_NAME} ${app.getVersion()} started`);   // KAYITLAR acilista bos kalsin
   autoConnectStartupAccounts();
@@ -611,14 +571,7 @@ async function installLatestUpdate() {
 ipcMain.handle('update:state', () => updateInfo);
 ipcMain.handle('update:install', () => installLatestUpdate());
 
-let diagnosticQuitDone=false;
-app.on('before-quit', event => {
-  quitting=true;disconnectAll();if(tor)tor.stop();store?.saveNow();
-  if(!diagnosticQuitDone&&logger.diagnostics){
-    event.preventDefault();diagnosticQuitDone=true;
-    logger.diagnostics.close().finally(()=>app.quit());
-  }
-});
+app.on('before-quit', () => { quitting = true; disconnectAll(); if (tor) tor.stop(); store.saveNow(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 // ---------------------------- IPC -------------------------------------------
@@ -630,21 +583,6 @@ function safeConfig() {
   copy.dialogs.hasPassword = !!(cfg.dialogs && cfg.dialogs.password);
   copy.dialogs.password = '';
   return copy;
-}
-
-// Kalici ac/kapa ayari ile gercek VPN surecini tek, yetkili durumda birlestir.
-// Renderer eski bir config kopyasina bakarak ON/OFF gostermesin.
-function liveVpnStatus(runtime) {
-  const saved = (store && store.get().tor) || {};
-  const st = runtime || (tor ? tor.status() : { running: false });
-  const enabled = saved.enabled === true;
-  const connectionEnabled = saved.connectionEnabled === true;
-  return {
-    ...st,
-    enabled,
-    connectionEnabled,
-    active: enabled && connectionEnabled && !!st.running
-  };
 }
 
 // Bota giden kopya: sifreler cozulur
@@ -666,7 +604,6 @@ function featList(cfg, key) {
 }
 // Ayar acik mi? (hesap secimi korunur, ayri bir bayrak ayari kapatir)
 function featEnabled(cfg, key) {
-  if (FORCED_DISABLED_FEATURES.has(key)) return false;
   const fe = (cfg && cfg.featureEnabled) || {};
   return fe[key] !== false && featList(cfg, key).length > 0;
 }
@@ -685,10 +622,7 @@ function syncToggleSummary() {
   }
   cfg.toggles = Object.assign({}, cfg.toggles, t);
   if (cfg.macros && cfg.macros.farmer) cfg.macros.farmer.enabled = featEnabled(cfg, 'macroFarmer');
-  if (cfg.macros && cfg.macros.spawner) cfg.macros.spawner.enabled = featEnabled(cfg, 'macroSpawner');
-  if (cfg.macros && cfg.macros.autoSell) cfg.macros.autoSell.enabled = featEnabled(cfg, 'macroAutoSell');
   if (cfg.autoSpam) cfg.autoSpam.enabled = featEnabled(cfg, 'autoSpam');
-  if (cfg.spawnerProtect) cfg.spawnerProtect.enabled = featEnabled(cfg, 'spawnerProtect');
   if (cfg.antiAfk) cfg.antiAfk.enabled = !!t.antiAfk;
   if (cfg.autoReconnect) cfg.autoReconnect.enabled = !!t.autoReconnect;
   store.saveDebounced();
@@ -735,26 +669,8 @@ function configForAccount(accountId) {
   c.tor = { ...(base.tor || {}), enabled: !!(base.tor && base.tor.enabled === true && base.tor.connectionEnabled === true && vpnAppliesTo(base, accountId)) };
   if (vpnLiveFor(base, accountId) && c.tor.streamSeparation) c.vpnNewIdentity = () => tor.newIdentity();
   const farmer = (base.macros && base.macros.farmer) || {};
-  c.macros = {
-    ...(base.macros || {}),
-    farmer: { ...farmer, enabled: featOn(base, 'macroFarmer', accountId) },
-    // Paket 72: Spawner AFK - hesaba ozel anahtar
-    spawner: { ...((base.macros && base.macros.spawner) || {}), enabled: featOn(base, 'macroSpawner', accountId) },
-    // Paket 76: Auto Sell - hesaba ozel anahtar
-    autoSell: { ...((base.macros && base.macros.autoSell) || {}), enabled: featOn(base, 'macroAutoSell', accountId) }
-  };
+  c.macros = { ...(base.macros || {}), farmer: { ...farmer, enabled: featOn(base, 'macroFarmer', accountId) } };
   c.autoSpam = spamCfgFor(accountId, base);
-  // Paket 85: koruma yalnızca hesap seçicide işaretlenen botta çalışır.
-  // Önceki genel özet tüm bağlı hesaplarda korumayı başlatıp alakasız
-  // sunucularda hareket/kazma denemelerine yol açabiliyordu.
-  c.spawnerProtect = {
-    ...(base.spawnerProtect || {}),
-    enabled: featOn(base, 'spawnerProtect', accountId)
-  };
-  // Spawner Koruma Bot Physics'i gizlice acmaz. Kullanici ayari OFF ise yakin
-  // spawnerlar yerinde kirilir, uzak hedeflere yurunmez. ChickenNW'de koruma
-  // acilinca fizigi zorla ON yapmak, hic kazma olmasa bile 15-20 sn sonra
-  // gx01 kick'ine yol acabiliyordu.
   return c;
 }
 function pushConfigToSessions() {
@@ -763,46 +679,11 @@ function pushConfigToSessions() {
   });
 }
 
-ipcMain.handle('tor:status', () => liveVpnStatus());
-ipcMain.handle('tor:start', async (_e, opts) => {
-  try {
-    const st = await tor.start(opts || {});
-    store.patch({ tor: { enabled: true, connectionEnabled: true, country: st.country, countries: String(st.country || '').split(',').filter(Boolean) } });
-    const status = liveVpnStatus(st);
-    send('tor-state', status);
-    return { ok: true, status };
-  } catch (e) {
-    logger.error(e.message);
-    return { ok: false, error: e.message };
-  }
-});
-ipcMain.handle('tor:stop', () => {
-  const st = tor.stop();
-  store.patch({ tor: { enabled: false, connectionEnabled: false } });
-  pushConfigToSessions();
-  const status = liveVpnStatus(st);
-  send('tor-state', status);
-  return { ok: true, status };
-});
-ipcMain.handle('tor:new-identity', async () => {
-  if (!store.get().tor || store.get().tor.enabled !== true || store.get().tor.connectionEnabled !== true) return { ok: false, error: 'VPN kapalı.' };
-  try {
-    const st = await tor.newIdentity();
-    const status = liveVpnStatus(st);
-    send('tor-state', status);
-    return { ok: true, status };
-  } catch (e) { return { ok: false, error: e.message }; }
-});
-ipcMain.handle('tor:set-country', async (_e, payload) => {
-  try {
-    const x = payload || {};
-    const st = await tor.setCountry(x.countries || [], !!x.strictNodes);
-    store.patch({ tor: { countries: x.countries || [], country: st.country, strictNodes: !!x.strictNodes } });
-    const status = liveVpnStatus(st);
-    send('tor-state', status);
-    return { ok: true, status };
-  } catch (e) { return { ok: false, error: e.message }; }
-});
+ipcMain.handle('tor:status', () => tor ? tor.status() : { running: false });
+ipcMain.handle('tor:start', async (_e, opts) => { try { const st = await tor.start(opts || {}); store.patch({ tor: { enabled: true, connectionEnabled: true, country: st.country, countries: String(st.country || '').split(',').filter(Boolean) } }); return { ok: true, status: st }; } catch (e) { logger.error(e.message); return { ok: false, error: e.message }; } });
+ipcMain.handle('tor:stop', () => { const st = tor.stop(); store.patch({ tor: { enabled: false, connectionEnabled: false } }); pushConfigToSessions(); return { ok: true, status: st }; });
+ipcMain.handle('tor:new-identity', async () => { if (!store.get().tor || store.get().tor.enabled !== true || store.get().tor.connectionEnabled !== true) return { ok: false, error: 'VPN kapalı.' }; try { return { ok: true, status: await tor.newIdentity() }; } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('tor:set-country', async (_e, payload) => { try { const x = payload || {}; const st = await tor.setCountry(x.countries || [], !!x.strictNodes); store.patch({ tor: { countries: x.countries || [], country: st.country, strictNodes: !!x.strictNodes } }); return { ok: true, status: st }; } catch (e) { return { ok: false, error: e.message }; } });
 
 ipcMain.handle('config:get', () => safeConfig());
 
@@ -904,7 +785,7 @@ ipcMain.handle('chat:history', (_e, slot) => {
 ipcMain.handle('bot:ping', async (_e, payload) => {
   const c = store.get().connection;
   const anyBot = botBySlot(0) || new BotManager(logger.channel(0), botAuthDir);
-  const res = await anyBot.probeServer((payload && payload.host) || c.host, (payload && payload.port) || c.port);
+  const res = await anyBot.ping((payload && payload.host) || c.host, (payload && payload.port) || c.port);
   if (res && res.ok && res.version) {
     // "1.21.11" gibi bir surum adi cikarilmaya calisilir
     const m = String(res.version).match(/\d+\.\d+(?:\.\d+)?/);
@@ -920,7 +801,6 @@ ipcMain.handle('versions:list', () => versions.list());
 ipcMain.handle('app:info', () => ({
   name: APP_NAME,
   version: app.getVersion(),
-  build: BUILD_INFO.package,
   author: 'Poltaaa',
   configPath: path.join(app.getPath('userData'), 'config.json'),
   logPath: path.join(app.getPath('userData'), 'ui-error.log')
@@ -984,54 +864,6 @@ ipcMain.handle('macro:stop', (_e, slot) => {
   const b = botBySlot(slot);
   return b ? b.stopMacro() : { ok: false, error: 'no_session' };
 });
-// Paket 72: Spawner AFK - makro yuvasi komuttan bagimsiz (spawner sag tik)
-ipcMain.handle('spawner:start', (_e, slot) => {
-  return {
-    ok: false,
-    error: L('Spawner AFK şu an kapalı; özellik deneme sürecinde.', 'Spawner AFK is currently unavailable while testing.')
-  };
-});
-ipcMain.handle('spawner:stop', (_e, slot) => {
-  const b = botBySlot(slot);
-  return b ? b.stopMacroSpawner() : { ok: false, error: 'no_session' };
-});
-// Paket 76: En yakin sandiktan hizli toplama + /sellall dongusu
-ipcMain.handle('autobuild:catalog', (_e, slot) => {
-  const b = botBySlot(slot) || botBySlot();
-  if (b) return b.autoBuildCatalog();
-  try { return { ok: true, version: '1.20.1', blocks: require('./bot/auto-build').catalog(require('minecraft-data')('1.20.1')) }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-ipcMain.handle('autobuild:state', (_e, slot) => {
-  const b = botBySlot(slot); return b ? b.autoBuild.state() : { status: 'idle', total: '0', processed: '0', placed: '0', skipped: '0', inventory: 0 };
-});
-ipcMain.handle('autobuild:position', (_e, slot) => {
-  const b = botBySlot(slot), p = b?.bot?.entity?.position;
-  return p ? { ok: true, x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z) } : { ok: false, error: 'not_connected' };
-});
-ipcMain.handle('autobuild:preview', (_e, payload) => {
-  const b = botBySlot(payload?.slot);
-  return b?.bot ? b.autoBuild.preview(b.bot, payload?.spec || {}) : { ok: false, error: 'not_connected' };
-});
-ipcMain.handle('autobuild:auto-pass', (_e, payload) => {
-  const b=botBySlot(payload?.slot);return b?b.autoBuild.setAutoPass(payload?.enabled):{ok:false,error:'not_connected'};
-});
-ipcMain.handle('autobuild:start', (_e, payload) => {
-  const b = botBySlot(payload?.slot); return b ? b.startAutoBuild(payload?.spec || {}) : { ok: false, error: 'not_connected' };
-});
-for (const action of ['pause', 'resume', 'stop']) ipcMain.handle('autobuild:' + action, (_e, slot) => {
-  const b = botBySlot(slot); return b ? b.autoBuild[action]() : { ok: false, error: 'not_connected' };
-});
-ipcMain.handle('autosell:start', (_e, slot) => {
-  const s = slot ? sessionBySlot(slot) : activeSession();
-  if (!s) return { ok: false, error: 'no_session' };
-  const cfg = configForAccount(s.accountId);
-  return s.bot.startAutoSell((cfg.macros && cfg.macros.autoSell) || {});
-});
-ipcMain.handle('autosell:stop', (_e, slot) => {
-  const b = botBySlot(slot);
-  return b ? b.stopAutoSell() : { ok: false, error: 'no_session' };
-});
 ipcMain.handle('bot:antiafk', (_e, payload) => {
   const enabled = typeof payload === 'object' && payload !== null ? payload.enabled : payload;
   const b = botBySlot(payload && payload.slot);
@@ -1040,22 +872,6 @@ ipcMain.handle('bot:antiafk', (_e, payload) => {
 ipcMain.handle('bot:run-join', (_e, slot) => {
   const b = botBySlot(slot);
   return b ? b.runJoinMessages() : { ok: false, error: 'no_session' };
-});
-
-// --- Envanter (paket 77: PANEL > ENVANTER) ----------------------------------
-ipcMain.handle('bot:inventory-get', (_e, slot) => {
-  const b = botBySlot(slot);
-  return b ? b.inventoryList() : { ok: false, error: 'no_session' };
-});
-ipcMain.handle('bot:inventory-drop', async (_e, payload) => {
-  const p = payload || {};
-  const b = botBySlot(p.slot);
-  return b ? b.inventoryAction(p.winSlot, p.action) : { ok: false, error: 'no_session' };
-});
-ipcMain.handle('bot:inventory-op', async (_e, payload) => {
-  const p = payload || {};
-  const b = botBySlot(p.session);
-  return b ? b.inventoryOperation(p.op || {}) : { ok: false, error: 'no_session' };
 });
 
 // --- Sunucu ekranlari (dialog) ----------------------------------------------

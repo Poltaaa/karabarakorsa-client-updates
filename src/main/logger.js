@@ -16,11 +16,6 @@ class Logger extends EventEmitter {
   }
 
   setLang(l) { this.lang = (l === 'tr') ? 'tr' : 'en'; }
-  enableDiagnostics(dir) {
-    const {DiagnosticLog}=require('./diagnostic-log');
-    this.diagnostics=new DiagnosticLog(dir,{onError:()=>this.warn(this.L('Teşhis dosyası yazılamadı; teknik kayıt yalnızca bellekte kalıyor.','Diagnostic file could not be written; technical logs remain in memory.'))});
-  }
-  diagnostic(kind,data,slot=0){this.diagnostics?.record(kind,{...data,slot:Number(slot)||0});}
   // Iki dilli log satiri: L('Türkçe', 'English')
   L(tr, en) { return this.lang === 'tr' ? tr : en; }
 
@@ -58,7 +53,6 @@ class Logger extends EventEmitter {
     const self = this;
     return {
       ts: () => self.ts(),
-      diagnostic: (kind,data) => self.diagnostic(kind,data,slot),
       L: (tr, en) => self.L(tr, en),
       log: (l, m) => self.log(l, m, slot),
       info: (m) => self.log('INFO', m, slot),
